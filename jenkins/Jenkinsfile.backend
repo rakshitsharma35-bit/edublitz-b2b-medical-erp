@@ -1,0 +1,237 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Jenkins Pipeline — Backend Microservices CI/CD
+// Triggered on: push to main or feature/* branches
+//
+// Credentials required (configure in Jenkins → Manage Credentials):
+//   AWS_CREDENTIALS       — AWS Access Key + Secret (type: AWS Credentials)
+//   SONARCLOUD_TOKEN      — SonarCloud API token (type: Secret Text)
+//   KUBECONFIG_CREDENTIAL — kubeconfig file (type: Secret File)
+// ─────────────────────────────────────────────────────────────────────────────
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: maven
+    image: maven:3.9-eclipse-temurin-17-alpine
+    command: [cat]
+    tty: true
+    volumeMounts:
+    - name: maven-cache
+      mountPath: /root/.m2
+  - name: docker
+    image: docker:24-dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+  - name: trivy
+    image: aquasec/trivy:latest
+    command: [cat]
+    tty: true
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: [cat]
+    tty: true
+  volumes:
+  - name: maven-cache
+    persistentVolumeClaim:
+      claimName: maven-cache-pvc
+'''
+        }
+    }
+
+    environment {
+        AWS_REGION     = 'us-east-1'
+        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        EKS_CLUSTER    = 'med-erp-prod-eks'
+        K8S_NAMESPACE  = 'med-erp'
+        IMAGE_TAG      = "${env.GIT_COMMIT.take(8)}"
+        SERVICES       = 'user-service product-service order-service'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_MSG = sh(
+                        script: 'git log -1 --format=%s',
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        stage('Build & Test') {
+            parallel {
+                stage('user-service') {
+                    steps {
+                        container('maven') {
+                            dir('user-service') {
+                                sh 'mvn clean verify -B -q'
+                                junit 'target/surefire-reports/*.xml'
+                            }
+                        }
+                    }
+                }
+                stage('product-service') {
+                    steps {
+                        container('maven') {
+                            dir('product-service') {
+                                sh 'mvn clean verify -B -q'
+                                junit 'target/surefire-reports/*.xml'
+                            }
+                        }
+                    }
+                }
+                stage('order-service') {
+                    steps {
+                        container('maven') {
+                            dir('order-service') {
+                                sh 'mvn clean verify -B -q'
+                                junit 'target/surefire-reports/*.xml'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('SonarCloud Quality Gate') {
+            when { branch 'main' }
+            steps {
+                withCredentials([string(credentialsId: 'SONARCLOUD_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    container('maven') {
+                        script {
+                            ['user-service', 'product-service', 'order-service'].each { svc ->
+                                dir(svc) {
+                                    sh """
+                                        mvn sonar:sonar \
+                                          -Dsonar.projectKey=edublitz-med-erp-${svc} \
+                                          -Dsonar.organization=edublitz \
+                                          -Dsonar.host.url=https://sonarcloud.io \
+                                          -Dsonar.login=${SONAR_TOKEN} \
+                                          -Dsonar.qualitygate.wait=true \
+                                          -B -q
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            when { branch 'main' }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'AWS_CREDENTIALS',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    container('docker') {
+                        script {
+                            // ECR login
+                            sh """
+                                aws ecr get-login-password --region ${AWS_REGION} | \
+                                docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                            """
+
+                            ['user-service', 'product-service', 'order-service'].each { svc ->
+                                def imageName = "${ECR_REGISTRY}/med-erp/${svc}:${IMAGE_TAG}"
+                                def imageLatest = "${ECR_REGISTRY}/med-erp/${svc}:latest"
+
+                                sh """
+                                    docker build -t ${imageName} -t ${imageLatest} ${svc}/
+                                    docker push ${imageName}
+                                    docker push ${imageLatest}
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Security Scan') {
+            when { branch 'main' }
+            steps {
+                container('trivy') {
+                    script {
+                        ['user-service', 'product-service', 'order-service'].each { svc ->
+                            sh """
+                                trivy image \
+                                  --exit-code 1 \
+                                  --severity HIGH,CRITICAL \
+                                  --no-progress \
+                                  --format table \
+                                  ${ECR_REGISTRY}/med-erp/${svc}:${IMAGE_TAG} \
+                                || (echo "Trivy found HIGH/CRITICAL vulnerabilities in ${svc}" && exit 1)
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            when { branch 'main' }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'KUBECONFIG_CREDENTIAL', variable: 'KUBECONFIG'),
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'AWS_CREDENTIALS',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]
+                ]) {
+                    container('kubectl') {
+                        script {
+                            // Update kubeconfig for EKS
+                            sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER}"
+
+                            ['user-service', 'product-service', 'order-service'].each { svc ->
+                                sh """
+                                    kubectl set image deployment/${svc} \
+                                      ${svc}=${ECR_REGISTRY}/med-erp/${svc}:${IMAGE_TAG} \
+                                      -n ${K8S_NAMESPACE}
+
+                                    kubectl rollout status deployment/${svc} \
+                                      -n ${K8S_NAMESPACE} --timeout=5m
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline succeeded. Image tag: ${IMAGE_TAG}"
+        }
+        failure {
+            echo "Pipeline failed. Check logs above."
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

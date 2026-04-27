@@ -1,7 +1,8 @@
 version: "3.9"
 
 # ──────────────────────────────────────────────
-#  Medical B2B ERP — Local Docker Compose Stack
+#  Medical B2B ERP — Docker Compose Stack
+#  Uses MongoDB Atlas (no local MongoDB container)
 #  Start everything: docker compose up -d
 # ──────────────────────────────────────────────
 
@@ -9,31 +10,7 @@ networks:
   med-erp-net:
     driver: bridge
 
-volumes:
-  mongo-data:
-
 services:
-
-  # ─── MongoDB (local dev only; use Atlas in staging/prod) ──────────────────
-  mongodb:
-    image: mongo:7.0
-    container_name: med-erp-mongodb
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme}
-    volumes:
-      - mongo-data:/data/db
-      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
-    networks:
-      - med-erp-net
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # ─── User Service ─────────────────────────────────────────────────────────
   user-service:
@@ -45,14 +22,11 @@ services:
     ports:
       - "8081:8081"
     environment:
-      MONGODB_URI: mongodb://admin:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/users_db?authSource=admin
+      MONGODB_URI: ${MONGODB_URI_USERS:-mongodb+srv://linux:redhat@cluster0.32n20bl.mongodb.net/users_db?retryWrites=true&w=majority&appName=Cluster0}
       JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
       JWT_EXPIRATION: 86400000
       JWT_REFRESH_EXPIRATION: 604800000
-      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
-    depends_on:
-      mongodb:
-        condition: service_healthy
+      CORS_ALLOWED_ORIGINS: "*"
     networks:
       - med-erp-net
     healthcheck:
@@ -72,13 +46,10 @@ services:
     ports:
       - "8082:8082"
     environment:
-      MONGODB_URI: mongodb://admin:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/products_db?authSource=admin
+      MONGODB_URI: ${MONGODB_URI_PRODUCTS:-mongodb+srv://linux:redhat@cluster0.32n20bl.mongodb.net/products_db?retryWrites=true&w=majority&appName=Cluster0}
       JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      CORS_ALLOWED_ORIGINS: "*"
       LOW_STOCK_THRESHOLD: 10
-    depends_on:
-      mongodb:
-        condition: service_healthy
     networks:
       - med-erp-net
     healthcheck:
@@ -98,9 +69,9 @@ services:
     ports:
       - "8083:8083"
     environment:
-      MONGODB_URI: mongodb://admin:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/orders_db?authSource=admin
+      MONGODB_URI: ${MONGODB_URI_ORDERS:-mongodb+srv://linux:redhat@cluster0.32n20bl.mongodb.net/orders_db?retryWrites=true&w=majority&appName=Cluster0}
       JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      CORS_ALLOWED_ORIGINS: "*"
       PRODUCT_SERVICE_URL: http://product-service:8082/api/v1
       USER_SERVICE_URL: http://user-service:8081/api/v1
     depends_on:
@@ -126,10 +97,6 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"
-    environment:
-      VITE_USER_SERVICE_URL: http://user-service:8081/api/v1
-      VITE_PRODUCT_SERVICE_URL: http://product-service:8082/api/v1
-      VITE_ORDER_SERVICE_URL: http://order-service:8083/api/v1
     depends_on:
       - user-service
       - product-service

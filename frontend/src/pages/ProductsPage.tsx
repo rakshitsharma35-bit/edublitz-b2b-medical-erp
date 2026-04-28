@@ -25,7 +25,7 @@ const UNIT_OPTIONS = ['strip', 'box', 'vial', 'bottle', 'tube', 'piece', 'kg', '
 
 const simpleProductSchema = z.object({
   distributorId: z.string().optional(),
-  sku: z.string().min(1, 'SKU is required'),
+  sku: z.string().min(1, 'Stock Keeping Unit (SKU) code is required'),
   name: z.string().min(1, 'Name is required'),
   manufacturer: z.string().min(1, 'Manufacturer is required'),
   category: z.enum(['MEDICINE', 'SURGICAL', 'DIAGNOSTIC', 'EQUIPMENT', 'CONSUMABLE', 'VACCINE']),
@@ -248,8 +248,19 @@ export default function ProductsPage() {
               )}
 
               <div>
-                <label className="form-label">SKU</label>
-                <input className="form-input" autoComplete="off" {...form.register('sku')} />
+                <label className="form-label" htmlFor="add-product-sku">
+                  SKU <span className="text-gray-500 font-normal">(Stock Keeping Unit)</span>
+                </label>
+                <input
+                  id="add-product-sku"
+                  className="form-input"
+                  autoComplete="off"
+                  placeholder="e.g. PARA-500-TAB-001"
+                  {...form.register('sku')}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Unique product code used for inventory, orders, and regulatory traceability.
+                </p>
                 {form.formState.errors.sku && (
                   <p className="text-xs text-red-600 mt-1">{form.formState.errors.sku.message}</p>
                 )}

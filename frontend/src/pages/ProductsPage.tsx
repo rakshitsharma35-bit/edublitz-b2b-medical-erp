@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -6,6 +6,7 @@ import { z } from 'zod'
 import toast from 'react-hot-toast'
 import { Package, Search, Filter, X } from 'lucide-react'
 import { productsApi } from '../api/products'
+import { organizationsApi } from '../api/organizations'
 import { useAuthStore } from '../store/authStore'
 import type { Product } from '../types'
 
@@ -20,34 +21,25 @@ const categoryBadge: Record<string, string> = {
   VACCINE: 'badge-green',
 }
 
-const productFormSchema = z.object({
+const UNIT_OPTIONS = ['strip', 'box', 'vial', 'bottle', 'tube', 'piece', 'kg', 'litre'] as const
+
+const simpleProductSchema = z.object({
+  distributorId: z.string().optional(),
   sku: z.string().min(1, 'SKU is required'),
   name: z.string().min(1, 'Name is required'),
   manufacturer: z.string().min(1, 'Manufacturer is required'),
   category: z.enum(['MEDICINE', 'SURGICAL', 'DIAGNOSTIC', 'EQUIPMENT', 'CONSUMABLE', 'VACCINE']),
-  type: z.enum(['BRANDED', 'GENERIC']),
   unit: z.string().min(1, 'Unit is required'),
   mrp: z.coerce.number().positive('MRP must be greater than 0'),
-  wholesalePrice: z.coerce.number().positive('Wholesale price must be greater than 0'),
-  genericName: z.string().optional(),
-  description: z.string().optional(),
-  dosageForm: z.string().optional(),
-  strength: z.string().optional(),
-  hsnCode: z.string().optional(),
-  gstRate: z.preprocess(
-    (val) => {
-      if (val === '' || val === undefined || val === null) return undefined
-      const n = Number(val)
-      return Number.isNaN(n) ? undefined : n
-    },
-    z.number().min(0).max(28).optional()
-  ),
+  wholesalePrice: z.coerce.number().positive('Wholesale must be greater than 0'),
   prescriptionRequired: z.boolean(),
-  controlledSubstance: z.boolean(),
-  distributorId: z.string().optional(),
 })
 
-type ProductFormData = z.infer<typeof productFormSchema>
+type SimpleProductForm = z.infer<typeof simpleProductSchema>
+
+function orgDropdownLabel(org: { name: string; registrationNumber: string; id: string }) {
+  return `${org.name} · ${org.registrationNumber} · ${org.id}`
+}
 
 export default function ProductsPage() {
   const user = useAuthStore(s => s.user)
@@ -74,42 +66,61 @@ export default function ProductsPage() {
 
   const products = search.length > 2 ? searchResults?.content : data?.content
 
-  const form = useForm<ProductFormData>({
-    resolver: zodResolver(productFormSchema),
+  const { data: distributorOrgs = [], isLoading: distributorsLoading } = useQuery({
+    queryKey: ['organizations', 'DISTRIBUTOR'],
+    queryFn: () => organizationsApi.listByType('DISTRIBUTOR'),
+    enabled: addOpen && user?.role === 'ADMIN',
+  })
+
+  const activeDistributors = useMemo(
+    () => distributorOrgs.filter(o => o.active),
+    [distributorOrgs]
+  )
+
+  const { data: myOrganization } = useQuery({
+    queryKey: ['organizations', user?.organizationId],
+    queryFn: () => organizationsApi.getById(user!.organizationId),
+    enabled: addOpen && user?.role === 'DISTRIBUTOR' && !!user?.organizationId,
+  })
+
+  const form = useForm<SimpleProductForm>({
+    resolver: zodResolver(simpleProductSchema),
     defaultValues: {
+      distributorId: '',
+      sku: '',
+      name: '',
+      manufacturer: '',
       category: 'MEDICINE',
-      type: 'BRANDED',
       unit: 'strip',
       mrp: 0,
       wholesalePrice: 0,
       prescriptionRequired: false,
-      controlledSubstance: false,
-      distributorId: '',
     },
   })
 
   useEffect(() => {
     if (!addOpen || !user) return
     form.reset({
+      distributorId: user.role === 'DISTRIBUTOR' ? user.organizationId : '',
       sku: '',
       name: '',
       manufacturer: '',
       category: 'MEDICINE',
-      type: 'BRANDED',
       unit: 'strip',
       mrp: 0,
       wholesalePrice: 0,
-      genericName: '',
-      description: '',
-      dosageForm: '',
-      strength: '',
-      hsnCode: '',
-      gstRate: undefined,
       prescriptionRequired: false,
-      controlledSubstance: false,
-      distributorId: user.role === 'DISTRIBUTOR' ? user.organizationId : '',
     })
   }, [addOpen, user, form.reset])
+
+  useEffect(() => {
+    if (!addOpen || user?.role !== 'ADMIN') return
+    if (activeDistributors.length !== 1) return
+    const only = activeDistributors[0]
+    if (only?.id && !form.getValues('distributorId')) {
+      form.setValue('distributorId', only.id)
+    }
+  }, [addOpen, user?.role, activeDistributors, form])
 
   const createMutation = useMutation({
     mutationFn: productsApi.create,
@@ -124,32 +135,25 @@ export default function ProductsPage() {
     },
   })
 
-  const onSubmitProduct = (data: ProductFormData) => {
+  const onSubmitProduct = (data: SimpleProductForm) => {
     const distributorId =
       user?.role === 'DISTRIBUTOR' ? user.organizationId : data.distributorId?.trim()
-    if (!distributorId) {
-      toast.error('Distributor organization ID is required')
+    if (user?.role === 'ADMIN' && !distributorId) {
+      toast.error('Select a distributor organization')
       return
     }
-    const gst = data.gstRate
     createMutation.mutate({
       sku: data.sku.trim(),
       name: data.name.trim(),
       manufacturer: data.manufacturer.trim(),
       category: data.category,
-      type: data.type,
+      type: 'BRANDED',
       unit: data.unit.trim(),
       mrp: data.mrp,
       wholesalePrice: data.wholesalePrice,
       prescriptionRequired: data.prescriptionRequired,
-      controlledSubstance: data.controlledSubstance,
-      distributorId,
-      genericName: data.genericName?.trim() || undefined,
-      description: data.description?.trim() || undefined,
-      dosageForm: data.dosageForm?.trim() || undefined,
-      strength: data.strength?.trim() || undefined,
-      hsnCode: data.hsnCode?.trim() || undefined,
-      ...(gst !== undefined && !Number.isNaN(gst) ? { gstRate: gst } : {}),
+      controlledSubstance: false,
+      distributorId: distributorId!,
     })
   }
 
@@ -171,7 +175,6 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {/* Add product modal */}
       {addOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
@@ -179,7 +182,7 @@ export default function ProductsPage() {
           onClick={() => !createMutation.isPending && setAddOpen(false)}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-product-title"
@@ -203,41 +206,72 @@ export default function ProductsPage() {
             <form className="p-5 space-y-4" onSubmit={form.handleSubmit(onSubmitProduct)}>
               {user?.role === 'ADMIN' && (
                 <div>
-                  <label className="form-label">Distributor organization ID</label>
-                  <input
-                    className="form-input"
-                    placeholder="MongoDB org id of the distributor"
-                    {...form.register('distributorId')}
-                  />
-                  {form.formState.errors.distributorId && (
-                    <p className="text-xs text-red-600 mt-1">{form.formState.errors.distributorId.message}</p>
+                  <label className="form-label" htmlFor="add-product-org">
+                    Organization (distributor)
+                  </label>
+                  {distributorsLoading ? (
+                    <p className="text-sm text-gray-500 py-2">Loading organizations…</p>
+                  ) : activeDistributors.length === 0 ? (
+                    <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                      No active distributor organizations found. Create one first.
+                    </p>
+                  ) : (
+                    <>
+                      <select
+                        id="add-product-org"
+                        className="form-input"
+                        {...form.register('distributorId')}
+                      >
+                        <option value="">— Select organization —</option>
+                        {activeDistributors.map(org => (
+                          <option key={org.id} value={org.id}>
+                            {orgDropdownLabel(org)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Name, registration number, and MongoDB ID are shown for each row.
+                      </p>
+                    </>
                   )}
-                  <p className="text-xs text-gray-500 mt-1">Products are scoped to a distributor organization.</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="form-label">SKU</label>
-                  <input className="form-input" {...form.register('sku')} />
-                  {form.formState.errors.sku && (
-                    <p className="text-xs text-red-600 mt-1">{form.formState.errors.sku.message}</p>
-                  )}
+              {user?.role === 'DISTRIBUTOR' && myOrganization && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                  <p className="font-medium text-gray-900">Your organization</p>
+                  <p className="text-gray-700 mt-0.5">{myOrganization.name}</p>
+                  <p className="text-xs text-gray-500 mt-1 font-mono break-all">
+                    ID: {myOrganization.id}
+                  </p>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="form-label">Product name</label>
-                  <input className="form-input" {...form.register('name')} />
-                  {form.formState.errors.name && (
-                    <p className="text-xs text-red-600 mt-1">{form.formState.errors.name.message}</p>
-                  )}
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="form-label">Manufacturer</label>
-                  <input className="form-input" {...form.register('manufacturer')} />
-                  {form.formState.errors.manufacturer && (
-                    <p className="text-xs text-red-600 mt-1">{form.formState.errors.manufacturer.message}</p>
-                  )}
-                </div>
+              )}
+
+              <div>
+                <label className="form-label">SKU</label>
+                <input className="form-input" autoComplete="off" {...form.register('sku')} />
+                {form.formState.errors.sku && (
+                  <p className="text-xs text-red-600 mt-1">{form.formState.errors.sku.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="form-label">Product name</label>
+                <input className="form-input" {...form.register('name')} />
+                {form.formState.errors.name && (
+                  <p className="text-xs text-red-600 mt-1">{form.formState.errors.name.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="form-label">Manufacturer</label>
+                <input className="form-input" {...form.register('manufacturer')} />
+                {form.formState.errors.manufacturer && (
+                  <p className="text-xs text-red-600 mt-1">{form.formState.errors.manufacturer.message}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="form-label">Category</label>
                   <select className="form-input" {...form.register('category')}>
@@ -247,71 +281,38 @@ export default function ProductsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">Type</label>
-                  <select className="form-input" {...form.register('type')}>
-                    <option value="BRANDED">BRANDED</option>
-                    <option value="GENERIC">GENERIC</option>
+                  <label className="form-label">Unit</label>
+                  <select className="form-input" {...form.register('unit')}>
+                    {UNIT_OPTIONS.map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
                   </select>
                 </div>
-                <div>
-                  <label className="form-label">Unit</label>
-                  <input className="form-input" placeholder="e.g. strip, box, vial" {...form.register('unit')} />
-                  {form.formState.errors.unit && (
-                    <p className="text-xs text-red-600 mt-1">{form.formState.errors.unit.message}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="form-label">GST % (optional)</label>
-                  <input type="number" step="0.01" className="form-input" {...form.register('gstRate')} />
-                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="form-label">MRP (₹)</label>
-                  <input type="number" step="0.01" className="form-input" {...form.register('mrp')} />
+                  <input type="number" step="0.01" min="0" className="form-input" {...form.register('mrp')} />
                   {form.formState.errors.mrp && (
                     <p className="text-xs text-red-600 mt-1">{form.formState.errors.mrp.message}</p>
                   )}
                 </div>
                 <div>
                   <label className="form-label">Wholesale (₹)</label>
-                  <input type="number" step="0.01" className="form-input" {...form.register('wholesalePrice')} />
+                  <input type="number" step="0.01" min="0" className="form-input" {...form.register('wholesalePrice')} />
                   {form.formState.errors.wholesalePrice && (
                     <p className="text-xs text-red-600 mt-1">{form.formState.errors.wholesalePrice.message}</p>
                   )}
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="form-label">Generic name (optional)</label>
-                  <input className="form-input" {...form.register('genericName')} />
-                </div>
-                <div>
-                  <label className="form-label">Dosage form (optional)</label>
-                  <input className="form-input" {...form.register('dosageForm')} />
-                </div>
-                <div>
-                  <label className="form-label">Strength (optional)</label>
-                  <input className="form-input" {...form.register('strength')} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="form-label">HSN code (optional)</label>
-                  <input className="form-input" {...form.register('hsnCode')} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="form-label">Description (optional)</label>
-                  <textarea className="form-input min-h-[72px]" rows={2} {...form.register('description')} />
-                </div>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" className="rounded border-gray-300" {...form.register('prescriptionRequired')} />
-                  Prescription required
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" className="rounded border-gray-300" {...form.register('controlledSubstance')} />
-                  Controlled substance
-                </label>
-              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" className="rounded border-gray-300" {...form.register('prescriptionRequired')} />
+                Prescription required
+              </label>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   className="btn-secondary"
@@ -320,8 +321,15 @@ export default function ProductsPage() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Saving…' : 'Create product'}
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={
+                    createMutation.isPending
+                    || (user?.role === 'ADMIN' && (distributorsLoading || activeDistributors.length === 0))
+                  }
+                >
+                  {createMutation.isPending ? 'Saving…' : 'Create'}
                 </button>
               </div>
             </form>
@@ -329,7 +337,6 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -360,7 +367,6 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Products grid */}
       {isLoading || searching ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => (
@@ -411,7 +417,6 @@ export default function ProductsPage() {
             ))}
           </div>
 
-          {/* Pagination */}
           {data && data.totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <button

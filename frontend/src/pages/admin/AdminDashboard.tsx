@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Package, ShoppingCart, AlertTriangle, Clock } from 'lucide-react'
 import StatCard from '../../components/common/StatCard'
@@ -27,6 +28,9 @@ export default function AdminDashboard() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">System overview and critical alerts</p>
+        <Link to="/admin/organizations" className="inline-block mt-2 text-sm font-medium text-blue-600 hover:text-blue-800">
+          Manage organizations (hospitals, distributors, vendors) →
+        </Link>
       </div>
 
       {/* Stats grid */}

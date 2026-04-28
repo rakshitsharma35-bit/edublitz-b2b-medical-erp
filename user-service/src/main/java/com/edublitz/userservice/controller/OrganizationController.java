@@ -37,9 +37,19 @@ public class OrganizationController {
     }
 
     @GetMapping
-    @Operation(summary = "List all organizations")
-    public ResponseEntity<List<Organization>> listAll() {
+    @Operation(summary = "List active organizations")
+    public ResponseEntity<List<Organization>> listActive() {
         return ResponseEntity.ok(organizationRepository.findByActiveTrue());
+    }
+
+    /**
+     * Admin-only list including inactive organizations (avoids <code>/all</code> vs <code>/{id}</code> ambiguity).
+     */
+    @GetMapping("/admin/list")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List all organizations including inactive (Admin only)")
+    public ResponseEntity<List<Organization>> listAllForAdmin() {
+        return ResponseEntity.ok(organizationRepository.findAll());
     }
 
     @GetMapping("/{id}")
@@ -62,8 +72,26 @@ public class OrganizationController {
                                                @Valid @RequestBody Organization updated) {
         Organization existing = organizationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + id));
+        if (!existing.getRegistrationNumber().equals(updated.getRegistrationNumber())
+                && organizationRepository.existsByRegistrationNumber(updated.getRegistrationNumber())) {
+            throw new BadRequestException("Registration number already exists: " + updated.getRegistrationNumber());
+        }
         updated.setId(existing.getId());
         updated.setCreatedAt(existing.getCreatedAt());
         return ResponseEntity.ok(organizationRepository.save(updated));
+    }
+
+    /**
+     * Soft-deactivate an organization. Users linked to it may still exist; prefer reactivation over hard delete.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Deactivate organization (Admin only)")
+    public ResponseEntity<Void> deactivate(@PathVariable String id) {
+        Organization org = organizationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + id));
+        org.setActive(false);
+        organizationRepository.save(org);
+        return ResponseEntity.noContent().build();
     }
 }

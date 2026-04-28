@@ -38,6 +38,8 @@ export interface Organization {
   active: boolean
   licenseNumber?: string
   licenseExpiry?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface Product {

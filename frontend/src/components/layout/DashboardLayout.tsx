@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import {
-  LayoutDashboard, Package, Boxes, ShoppingCart,
+  LayoutDashboard, Package, Boxes, ShoppingCart, Building2,
   LogOut, Menu, X, Activity
 } from 'lucide-react'
 import { useState } from 'react'
@@ -9,6 +9,7 @@ import clsx from 'clsx'
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'DISTRIBUTOR', 'HOSPITAL'] },
+  { to: '/admin/organizations', label: 'Organizations', icon: Building2, roles: ['ADMIN'] },
   { to: '/products', label: 'Products', icon: Package, roles: ['ADMIN', 'DISTRIBUTOR', 'HOSPITAL'] },
   { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['ADMIN', 'DISTRIBUTOR'] },
   { to: '/orders', label: 'Orders', icon: ShoppingCart, roles: ['ADMIN', 'DISTRIBUTOR', 'HOSPITAL'] },

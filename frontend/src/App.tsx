@@ -3,6 +3,7 @@ import { useAuthStore } from './store/authStore'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminOrganizationsPage from './pages/admin/AdminOrganizationsPage'
 import DistributorDashboard from './pages/distributor/DistributorDashboard'
 import HospitalDashboard from './pages/hospital/HospitalDashboard'
 import ProductsPage from './pages/ProductsPage'
@@ -53,6 +54,9 @@ export default function App() {
 
         <Route path="admin" element={
           <RoleRoute role="ADMIN"><AdminDashboard /></RoleRoute>
+        } />
+        <Route path="admin/organizations" element={
+          <RoleRoute role="ADMIN"><AdminOrganizationsPage /></RoleRoute>
         } />
 
         <Route path="distributor" element={

@@ -1,6 +1,27 @@
 import { productApi } from './axios'
 import type { Product, InventoryItem, PageResponse } from '../types'
 
+/** Body for POST /products — matches backend ProductRequest */
+export type CreateProductPayload = {
+  sku: string
+  name: string
+  genericName?: string
+  description?: string
+  manufacturer: string
+  category: Product['category']
+  type: Product['type']
+  dosageForm?: string
+  strength?: string
+  unit: string
+  mrp: number
+  wholesalePrice: number
+  prescriptionRequired: boolean
+  controlledSubstance: boolean
+  hsnCode?: string
+  gstRate?: number
+  distributorId: string
+}
+
 export const productsApi = {
   list: (params?: { category?: string; distributorId?: string; page?: number; size?: number }) =>
     productApi.get<PageResponse<Product>>('/products', { params }).then(r => r.data),
@@ -11,7 +32,7 @@ export const productsApi = {
   getById: (id: string) =>
     productApi.get<Product>(`/products/${id}`).then(r => r.data),
 
-  create: (data: Omit<Product, 'id' | 'active' | 'createdAt'>) =>
+  create: (data: CreateProductPayload) =>
     productApi.post<Product>('/products', data).then(r => r.data),
 
   getInventory: (productId: string) =>

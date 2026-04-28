@@ -29,7 +29,7 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">System overview and critical alerts</p>
         <Link to="/admin/organizations" className="inline-block mt-2 text-sm font-medium text-blue-600 hover:text-blue-800">
-          Manage organizations (hospitals, distributors, vendors) →
+          Manage organizations (hospitals & distributors) →
         </Link>
       </div>
 

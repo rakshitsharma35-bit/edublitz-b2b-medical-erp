@@ -31,7 +31,11 @@ export default function OrdersPage() {
           </p>
         </div>
         {user?.role === 'HOSPITAL' && (
-          <button className="btn-primary flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-primary flex items-center gap-2"
+            onClick={() => navigate('/orders/new')}
+          >
             <Plus className="w-4 h-4" /> New Order
           </button>
         )}
@@ -79,7 +83,16 @@ export default function OrdersPage() {
                       {formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })}
                     </td>
                     <td className="px-4 py-4">
-                      <button className="text-blue-600 text-xs hover:underline">View</button>
+                      <button
+                        type="button"
+                        className="text-blue-600 text-xs hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/orders/${order.id}`)
+                        }}
+                      >
+                        View
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -97,10 +110,10 @@ export default function OrdersPage() {
 
           {data && data.totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
-              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={data.first}
+              <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={data.first}
                 className="btn-secondary text-sm disabled:opacity-40">Previous</button>
               <span className="text-sm text-gray-600">Page {data.number + 1} of {data.totalPages}</span>
-              <button onClick={() => setPage(p => p + 1)} disabled={data.last}
+              <button type="button" onClick={() => setPage(p => p + 1)} disabled={data.last}
                 className="btn-secondary text-sm disabled:opacity-40">Next</button>
             </div>
           )}

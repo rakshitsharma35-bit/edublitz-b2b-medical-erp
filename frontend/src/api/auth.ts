@@ -3,7 +3,7 @@ import type { AuthResponse } from '../types'
 
 export const authApi = {
   login: (email: string, password: string) =>
-    userApi.post<AuthResponse>('/auth/login', { email, password }).then(r => r.data),
+    userApi.post<AuthResponse>('auth/login', { email, password }).then(r => r.data),
 
   register: (data: {
     firstName: string
@@ -13,5 +13,5 @@ export const authApi = {
     phone?: string
     role: string
     organizationId: string
-  }) => userApi.post<AuthResponse>('/auth/register', data).then(r => r.data),
+  }) => userApi.post<AuthResponse>('auth/register', data).then(r => r.data),
 }

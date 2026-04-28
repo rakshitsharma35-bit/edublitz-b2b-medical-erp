@@ -10,6 +10,7 @@ import ProductsPage from './pages/ProductsPage'
 import InventoryPage from './pages/InventoryPage'
 import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
+import NewOrderPage from './pages/NewOrderPage'
 import DashboardLayout from './components/layout/DashboardLayout'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -70,6 +71,9 @@ export default function App() {
         <Route path="products" element={<ProductsPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/new" element={
+          <RoleRoute role="HOSPITAL"><NewOrderPage /></RoleRoute>
+        } />
         <Route path="orders/:id" element={<OrderDetailPage />} />
       </Route>
 

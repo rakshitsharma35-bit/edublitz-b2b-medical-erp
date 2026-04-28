@@ -8,12 +8,12 @@ import { Building2, Pencil, Plus, Trash2, RotateCcw, X } from 'lucide-react'
 import { organizationsApi, type OrganizationWritePayload } from '../../api/organizations'
 import type { Organization } from '../../types'
 
-type OrgTab = 'ALL' | 'HOSPITAL' | 'DISTRIBUTOR' | 'VENDOR'
+type OrgTab = 'ALL' | 'HOSPITAL' | 'DISTRIBUTOR'
 
 const orgFormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   registrationNumber: z.string().min(1, 'Registration number is required'),
-  type: z.enum(['HOSPITAL', 'DISTRIBUTOR', 'VENDOR']),
+  type: z.enum(['HOSPITAL', 'DISTRIBUTOR']),
   street: z.string().min(1, 'Street is required'),
   city: z.string().min(1, 'City is required'),
   state: z.string().min(1, 'State is required'),
@@ -45,10 +45,11 @@ const emptyDefaults: OrgFormValues = {
 }
 
 function orgToFormValues(o: Organization): OrgFormValues {
+  const t = o.type === 'VENDOR' ? 'DISTRIBUTOR' : o.type
   return {
     name: o.name,
     registrationNumber: o.registrationNumber,
-    type: o.type,
+    type: t === 'HOSPITAL' || t === 'DISTRIBUTOR' ? t : 'DISTRIBUTOR',
     street: o.address?.street ?? '',
     city: o.address?.city ?? '',
     state: o.address?.state ?? '',
@@ -87,7 +88,6 @@ function formToWritePayload(v: OrgFormValues): OrganizationWritePayload {
 const typeBadge: Record<string, string> = {
   HOSPITAL: 'badge-green',
   DISTRIBUTOR: 'badge-blue',
-  VENDOR: 'badge-gray',
 }
 
 export default function AdminOrganizationsPage() {
@@ -207,7 +207,7 @@ export default function AdminOrganizationsPage() {
             Organizations
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            Manage hospitals, distributors, and vendors — view, add, edit, or deactivate.
+            Manage hospitals, distributors, and org records — view, add, edit, or deactivate.
           </p>
         </div>
         <button type="button" className="btn-primary flex items-center gap-2 shrink-0" onClick={openCreate}>
@@ -217,7 +217,7 @@ export default function AdminOrganizationsPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(['ALL', 'HOSPITAL', 'DISTRIBUTOR', 'VENDOR'] as const).map(t => (
+        {(['ALL', 'HOSPITAL', 'DISTRIBUTOR'] as const).map(t => (
           <button
             key={t}
             type="button"
@@ -226,7 +226,7 @@ export default function AdminOrganizationsPage() {
               tab === t ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
-            {t === 'ALL' ? 'All' : t === 'HOSPITAL' ? 'Hospitals' : t === 'DISTRIBUTOR' ? 'Distributors' : 'Vendors'}
+            {t === 'ALL' ? 'All' : t === 'HOSPITAL' ? 'Hospitals' : 'Distributors'}
           </button>
         ))}
       </div>
@@ -336,7 +336,6 @@ export default function AdminOrganizationsPage() {
                 <select className="form-input" {...form.register('type')}>
                   <option value="HOSPITAL">Hospital</option>
                   <option value="DISTRIBUTOR">Distributor</option>
-                  <option value="VENDOR">Vendor</option>
                 </select>
               </div>
               <div>

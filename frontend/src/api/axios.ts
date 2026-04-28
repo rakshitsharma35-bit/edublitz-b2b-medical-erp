@@ -5,6 +5,10 @@ const createApiClient = (baseURL: string): AxiosInstance => {
   const client = axios.create({ baseURL, timeout: 15_000 })
 
   client.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+    // Leading "/" makes axios treat the path as site-absolute (drops /api/user prefix → 404 on Apache/nginx).
+    if (config.url?.startsWith('/')) {
+      config.url = config.url.slice(1)
+    }
     const token = useAuthStore.getState().accessToken
     if (token) {
       config.headers.Authorization = `Bearer ${token}`

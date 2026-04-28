@@ -4,11 +4,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
-import { Package, Search, Filter, X } from 'lucide-react'
+import { Package, Search, Filter, X, Pencil, Trash2 } from 'lucide-react'
 import { productsApi } from '../api/products'
 import { organizationsApi } from '../api/organizations'
 import { useAuthStore } from '../store/authStore'
-import type { Product } from '../types'
+import type { Product, User } from '../types'
 
 const categories = ['ALL', 'MEDICINE', 'SURGICAL', 'DIAGNOSTIC', 'EQUIPMENT', 'CONSUMABLE', 'VACCINE']
 
@@ -29,16 +29,50 @@ const simpleProductSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   manufacturer: z.string().min(1, 'Manufacturer is required'),
   category: z.enum(['MEDICINE', 'SURGICAL', 'DIAGNOSTIC', 'EQUIPMENT', 'CONSUMABLE', 'VACCINE']),
+  type: z.enum(['BRANDED', 'GENERIC']),
   unit: z.string().min(1, 'Unit is required'),
   mrp: z.coerce.number().positive('MRP must be greater than 0'),
   wholesalePrice: z.coerce.number().positive('Wholesale must be greater than 0'),
   prescriptionRequired: z.boolean(),
+  controlledSubstance: z.boolean(),
 })
 
 type SimpleProductForm = z.infer<typeof simpleProductSchema>
 
 function orgDropdownLabel(org: { name: string; registrationNumber: string; id: string }) {
   return `${org.name} · ${org.registrationNumber} · ${org.id}`
+}
+
+function emptyFormDefaults(user: User): SimpleProductForm {
+  return {
+    distributorId: user.role === 'DISTRIBUTOR' ? user.organizationId : '',
+    sku: '',
+    name: '',
+    manufacturer: '',
+    category: 'MEDICINE',
+    type: 'BRANDED',
+    unit: 'strip',
+    mrp: 0,
+    wholesalePrice: 0,
+    prescriptionRequired: false,
+    controlledSubstance: false,
+  }
+}
+
+function productToFormValues(product: Product): SimpleProductForm {
+  return {
+    distributorId: product.distributorId,
+    sku: product.sku,
+    name: product.name,
+    manufacturer: product.manufacturer,
+    category: product.category,
+    type: product.type,
+    unit: product.unit,
+    mrp: Number(product.mrp),
+    wholesalePrice: Number(product.wholesalePrice),
+    prescriptionRequired: product.prescriptionRequired,
+    controlledSubstance: product.controlledSubstance,
+  }
 }
 
 export default function ProductsPage() {
@@ -48,19 +82,25 @@ export default function ProductsPage() {
   const [category, setCategory] = useState('ALL')
   const [page, setPage] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+
+  const distributorScope =
+    user?.role === 'DISTRIBUTOR' && user.organizationId ? user.organizationId : undefined
 
   const { data, isLoading } = useQuery({
-    queryKey: ['products', category, page],
-    queryFn: () => productsApi.list({
-      category: category === 'ALL' ? undefined : category,
-      page,
-      size: 12,
-    }),
+    queryKey: ['products', category, page, user?.role, user?.organizationId],
+    queryFn: () =>
+      productsApi.list({
+        category: category === 'ALL' ? undefined : category,
+        distributorId: distributorScope,
+        page,
+        size: 12,
+      }),
   })
 
   const { data: searchResults, isLoading: searching } = useQuery({
-    queryKey: ['products', 'search', search],
-    queryFn: () => productsApi.search(search),
+    queryKey: ['products', 'search', search, user?.role, user?.organizationId],
+    queryFn: () => productsApi.search(search, 0, distributorScope),
     enabled: search.length > 2,
   })
 
@@ -85,49 +125,52 @@ export default function ProductsPage() {
 
   const form = useForm<SimpleProductForm>({
     resolver: zodResolver(simpleProductSchema),
-    defaultValues: {
-      distributorId: '',
-      sku: '',
-      name: '',
-      manufacturer: '',
-      category: 'MEDICINE',
-      unit: 'strip',
-      mrp: 0,
-      wholesalePrice: 0,
-      prescriptionRequired: false,
-    },
+    defaultValues: user
+      ? emptyFormDefaults(user)
+      : {
+          distributorId: '',
+          sku: '',
+          name: '',
+          manufacturer: '',
+          category: 'MEDICINE',
+          type: 'BRANDED',
+          unit: 'strip',
+          mrp: 0,
+          wholesalePrice: 0,
+          prescriptionRequired: false,
+          controlledSubstance: false,
+        },
   })
 
   useEffect(() => {
     if (!addOpen || !user) return
-    form.reset({
-      distributorId: user.role === 'DISTRIBUTOR' ? user.organizationId : '',
-      sku: '',
-      name: '',
-      manufacturer: '',
-      category: 'MEDICINE',
-      unit: 'strip',
-      mrp: 0,
-      wholesalePrice: 0,
-      prescriptionRequired: false,
-    })
-  }, [addOpen, user, form.reset])
+    if (editingProduct) {
+      form.reset(productToFormValues(editingProduct))
+    } else {
+      form.reset(emptyFormDefaults(user))
+    }
+  }, [addOpen, editingProduct?.id, user, form.reset])
 
   useEffect(() => {
-    if (!addOpen || user?.role !== 'ADMIN') return
+    if (!addOpen || user?.role !== 'ADMIN' || editingProduct) return
     if (activeDistributors.length !== 1) return
     const only = activeDistributors[0]
     if (only?.id && !form.getValues('distributorId')) {
       form.setValue('distributorId', only.id)
     }
-  }, [addOpen, user?.role, activeDistributors, form])
+  }, [addOpen, user?.role, editingProduct, activeDistributors, form])
+
+  const closeProductModal = () => {
+    setAddOpen(false)
+    setEditingProduct(null)
+  }
 
   const createMutation = useMutation({
     mutationFn: productsApi.create,
     onSuccess: () => {
       toast.success('Product created')
       queryClient.invalidateQueries({ queryKey: ['products'] })
-      setAddOpen(false)
+      closeProductModal()
     },
     onError: (err: unknown) => {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -135,29 +178,93 @@ export default function ProductsPage() {
     },
   })
 
-  const onSubmitProduct = (data: SimpleProductForm) => {
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Parameters<typeof productsApi.update>[1] }) =>
+      productsApi.update(id, body),
+    onSuccess: () => {
+      toast.success('Product updated')
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      closeProductModal()
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail ?? 'Failed to update product')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: productsApi.remove,
+    onSuccess: () => {
+      toast.success('Product removed from catalog')
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail ?? 'Failed to remove product')
+    },
+  })
+
+  const formBusy = createMutation.isPending || updateMutation.isPending
+
+  const buildPayload = (data: SimpleProductForm): Parameters<typeof productsApi.create>[0] => {
     const distributorId =
       user?.role === 'DISTRIBUTOR' ? user.organizationId : data.distributorId?.trim()
-    if (user?.role === 'ADMIN' && !distributorId) {
-      toast.error('Select a distributor organization')
-      return
-    }
-    createMutation.mutate({
+    return {
       sku: data.sku.trim(),
       name: data.name.trim(),
       manufacturer: data.manufacturer.trim(),
       category: data.category,
-      type: 'BRANDED',
+      type: data.type,
       unit: data.unit.trim(),
       mrp: data.mrp,
       wholesalePrice: data.wholesalePrice,
       prescriptionRequired: data.prescriptionRequired,
-      controlledSubstance: false,
+      controlledSubstance: data.controlledSubstance,
       distributorId: distributorId!,
-    })
+    }
+  }
+
+  const onSubmitProduct = (data: SimpleProductForm) => {
+    if (!user) return
+    const distributorId =
+      user.role === 'DISTRIBUTOR' ? user.organizationId : data.distributorId?.trim()
+    if (user.role === 'ADMIN' && !distributorId) {
+      toast.error('Select a distributor organization')
+      return
+    }
+    const body = buildPayload(data)
+    if (editingProduct) {
+      updateMutation.mutate({ id: editingProduct.id, body })
+    } else {
+      createMutation.mutate(body)
+    }
   }
 
   const canAddProduct = user?.role === 'ADMIN' || user?.role === 'DISTRIBUTOR'
+
+  const canManageProduct = (p: Product) =>
+    user?.role === 'ADMIN' ||
+    (user?.role === 'DISTRIBUTOR' && p.distributorId === user.organizationId)
+
+  const openAddModal = () => {
+    setEditingProduct(null)
+    setAddOpen(true)
+  }
+
+  const openEditModal = (p: Product) => {
+    setEditingProduct(p)
+    setAddOpen(true)
+  }
+
+  const confirmRemove = (p: Product) => {
+    if (!window.confirm(`Remove “${p.name}” from the catalog? This cannot be undone from the UI.`)) {
+      return
+    }
+    deleteMutation.mutate(p.id)
+  }
+
+  const adminOrgSelectBlocked =
+    user?.role === 'ADMIN' && (distributorsLoading || activeDistributors.length === 0)
 
   return (
     <div className="space-y-6">
@@ -169,7 +276,7 @@ export default function ProductsPage() {
           </p>
         </div>
         {canAddProduct && (
-          <button type="button" className="btn-primary" onClick={() => setAddOpen(true)}>
+          <button type="button" className="btn-primary" onClick={openAddModal}>
             + Add Product
           </button>
         )}
@@ -179,24 +286,24 @@ export default function ProductsPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           role="presentation"
-          onClick={() => !createMutation.isPending && setAddOpen(false)}
+          onClick={() => !formBusy && closeProductModal()}
         >
           <div
             className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="add-product-title"
+            aria-labelledby="product-modal-title"
             onClick={e => e.stopPropagation()}
           >
             <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 px-5 py-4 bg-white rounded-t-xl">
-              <h2 id="add-product-title" className="text-lg font-semibold text-gray-900">
-                Add product
+              <h2 id="product-modal-title" className="text-lg font-semibold text-gray-900">
+                {editingProduct ? 'Edit product' : 'Add product'}
               </h2>
               <button
                 type="button"
                 className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
-                disabled={createMutation.isPending}
-                onClick={() => setAddOpen(false)}
+                disabled={formBusy}
+                onClick={closeProductModal}
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -206,7 +313,7 @@ export default function ProductsPage() {
             <form className="p-5 space-y-4" onSubmit={form.handleSubmit(onSubmitProduct)}>
               {user?.role === 'ADMIN' && (
                 <div>
-                  <label className="form-label" htmlFor="add-product-org">
+                  <label className="form-label" htmlFor="product-org">
                     Organization (distributor)
                   </label>
                   {distributorsLoading ? (
@@ -218,7 +325,7 @@ export default function ProductsPage() {
                   ) : (
                     <>
                       <select
-                        id="add-product-org"
+                        id="product-org"
                         className="form-input"
                         {...form.register('distributorId')}
                       >
@@ -228,6 +335,12 @@ export default function ProductsPage() {
                             {orgDropdownLabel(org)}
                           </option>
                         ))}
+                        {editingProduct &&
+                          !activeDistributors.some(o => o.id === editingProduct.distributorId) && (
+                            <option value={editingProduct.distributorId}>
+                              Current distributor · {editingProduct.distributorId}
+                            </option>
+                          )}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">
                         Name, registration number, and MongoDB ID are shown for each row.
@@ -248,18 +361,18 @@ export default function ProductsPage() {
               )}
 
               <div>
-                <label className="form-label" htmlFor="add-product-sku">
-                  SKU <span className="text-gray-500 font-normal">(Stock Keeping Unit)</span>
+                <label className="form-label" htmlFor="product-sku">
+                  Stock Keeping Unit (SKU)
                 </label>
                 <input
-                  id="add-product-sku"
+                  id="product-sku"
                   className="form-input"
                   autoComplete="off"
                   placeholder="e.g. PARA-500-TAB-001"
                   {...form.register('sku')}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Unique product code used for inventory, orders, and regulatory traceability.
+                  SKU is the unique product code used for inventory, orders, and regulatory traceability.
                 </p>
                 {form.formState.errors.sku && (
                   <p className="text-xs text-red-600 mt-1">{form.formState.errors.sku.message}</p>
@@ -301,6 +414,16 @@ export default function ProductsPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="form-label" htmlFor="product-type">
+                  Product type
+                </label>
+                <select id="product-type" className="form-input" {...form.register('type')}>
+                  <option value="BRANDED">Branded</option>
+                  <option value="GENERIC">Generic</option>
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="form-label">MRP (₹)</label>
@@ -323,12 +446,17 @@ export default function ProductsPage() {
                 Prescription required
               </label>
 
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" className="rounded border-gray-300" {...form.register('controlledSubstance')} />
+                Controlled substance
+              </label>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   className="btn-secondary"
-                  disabled={createMutation.isPending}
-                  onClick={() => setAddOpen(false)}
+                  disabled={formBusy}
+                  onClick={closeProductModal}
                 >
                   Cancel
                 </button>
@@ -336,11 +464,11 @@ export default function ProductsPage() {
                   type="submit"
                   className="btn-primary"
                   disabled={
-                    createMutation.isPending
-                    || (user?.role === 'ADMIN' && (distributorsLoading || activeDistributors.length === 0))
+                    formBusy
+                    || (!editingProduct && user?.role === 'ADMIN' && adminOrgSelectBlocked)
                   }
                 >
-                  {createMutation.isPending ? 'Saving…' : 'Create'}
+                  {formBusy ? 'Saving…' : editingProduct ? 'Save changes' : 'Create'}
                 </button>
               </div>
             </form>
@@ -392,14 +520,21 @@ export default function ProductsPage() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {products?.map((product: Product) => (
-              <div key={product.id} className="card hover:shadow-md transition-shadow cursor-pointer">
+              <div key={product.id} className="card hover:shadow-md transition-shadow flex flex-col">
                 <div className="flex items-start justify-between mb-3">
                   <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
                     <Package className="w-5 h-5 text-blue-600" />
                   </div>
-                  <span className={categoryBadge[product.category] ?? 'badge-gray'}>
-                    {product.category}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={categoryBadge[product.category] ?? 'badge-gray'}>
+                      {product.category}
+                    </span>
+                    {!product.active && (
+                      <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1">
@@ -410,7 +545,7 @@ export default function ProductsPage() {
                 )}
                 <p className="text-xs text-gray-400 mb-3">{product.manufacturer}</p>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mt-auto">
                   <div>
                     <p className="text-xs text-gray-400">Wholesale</p>
                     <p className="font-bold text-gray-900">₹{product.wholesalePrice}</p>
@@ -424,11 +559,39 @@ export default function ProductsPage() {
                 {product.prescriptionRequired && (
                   <p className="text-xs text-red-500 mt-2 font-medium">℞ Prescription required</p>
                 )}
+
+                {canManageProduct(product) && (
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                    <button
+                      type="button"
+                      className="btn-secondary flex-1 text-xs py-2 inline-flex items-center justify-center gap-1"
+                      onClick={e => {
+                        e.stopPropagation()
+                        openEditModal(product)
+                      }}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary flex-1 text-xs py-2 inline-flex items-center justify-center gap-1 text-red-700 border-red-200 hover:bg-red-50"
+                      disabled={deleteMutation.isPending}
+                      onClick={e => {
+                        e.stopPropagation()
+                        confirmRemove(product)
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
 
-          {data && data.totalPages > 1 && (
+          {data && data.totalPages > 1 && search.length <= 2 && (
             <div className="flex items-center justify-center gap-2">
               <button
                 type="button"

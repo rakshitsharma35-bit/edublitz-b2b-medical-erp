@@ -10,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -84,16 +86,31 @@ public class OrderService {
         return orderRepository.findByDistributorOrgId(distributorOrgId, pageable);
     }
 
-    public Order approveOrder(String id, String approvedByUserId, String bearerToken) {
+    public Order approveOrder(String id, String approvedByUserId, String bearerToken,
+                              String orgId, String role) {
         Order order = getOrder(id);
         validateTransition(order.getStatus(), Order.OrderStatus.APPROVED);
+        assertDistributorMayActOnOrder(order, role, orgId);
 
-        // Reserve stock for each item
+        List<Order.OrderItem> reservedSoFar = new ArrayList<>();
         for (Order.OrderItem item : order.getItems()) {
-            boolean reserved = productServiceClient.reserveStock(item.getProductId(), item.getQuantity(), bearerToken);
-            if (!reserved) {
-                throw new BadRequestException("Insufficient stock for product: " + item.getProductName());
+            try {
+                boolean reserved = productServiceClient.reserveStock(
+                        item.getProductId(), item.getQuantity(), bearerToken);
+                if (!reserved) {
+                    releaseReservedLineItems(reservedSoFar, bearerToken);
+                    throw new BadRequestException(stockShortageMessage(item));
+                }
+            } catch (WebClientResponseException e) {
+                releaseReservedLineItems(reservedSoFar, bearerToken);
+                throw new BadRequestException(
+                        "Could not reserve inventory for " + item.getProductName()
+                                + " (Stock Keeping Unit / SKU: " + item.getProductSku()
+                                + "): product service returned HTTP " + e.getStatusCode().value()
+                                + ". Check connectivity, JWT configuration, and that stock exists for this product.",
+                        e);
             }
+            reservedSoFar.add(item);
         }
 
         order.setStatus(Order.OrderStatus.APPROVED);
@@ -102,18 +119,21 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
-    public Order rejectOrder(String id, String reason, String rejectedByUserId) {
+    public Order rejectOrder(String id, String reason, String rejectedByUserId, String orgId, String role) {
         Order order = getOrder(id);
         validateTransition(order.getStatus(), Order.OrderStatus.REJECTED);
+        assertDistributorMayActOnOrder(order, role, orgId);
 
         order.setStatus(Order.OrderStatus.REJECTED);
         order.setRejectionReason(reason);
         return orderRepository.save(order);
     }
 
-    public Order dispatchOrder(String id, String trackingNumber, String dispatchedByUserId) {
+    public Order dispatchOrder(String id, String trackingNumber, String dispatchedByUserId,
+                               String orgId, String role) {
         Order order = getOrder(id);
         validateTransition(order.getStatus(), Order.OrderStatus.DISPATCHED);
+        assertDistributorMayActOnOrder(order, role, orgId);
 
         order.setStatus(Order.OrderStatus.DISPATCHED);
         order.setTrackingNumber(trackingNumber);
@@ -195,6 +215,28 @@ public class OrderService {
                 .withZone(ZoneOffset.UTC)
                 .format(Instant.now());
         return "MED-ORD-" + date + "-" + SEQUENCE.incrementAndGet();
+    }
+
+    private void assertDistributorMayActOnOrder(Order order, String role, String orgId) {
+        if ("ADMIN".equals(role)) {
+            return;
+        }
+        if (orgId == null || !orgId.equals(order.getDistributorOrgId())) {
+            throw new AccessDeniedException("This order is not assigned to your distributor organization");
+        }
+    }
+
+    private void releaseReservedLineItems(List<Order.OrderItem> items, String bearerToken) {
+        for (Order.OrderItem item : items) {
+            productServiceClient.releaseStock(item.getProductId(), item.getQuantity(), bearerToken);
+        }
+    }
+
+    private static String stockShortageMessage(Order.OrderItem item) {
+        return "Insufficient stock for line item: " + item.getProductName()
+                + " (Stock Keeping Unit / SKU: " + item.getProductSku()
+                + "). Add inventory batches totaling at least " + item.getQuantity()
+                + " sellable units, or reduce the order.";
     }
 
     private void validateTransition(Order.OrderStatus current, Order.OrderStatus target) {

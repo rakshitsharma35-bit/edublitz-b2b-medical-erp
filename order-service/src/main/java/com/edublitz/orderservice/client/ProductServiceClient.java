@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -60,6 +61,10 @@ public class ProductServiceClient {
                     .block();
 
             return response != null && Boolean.TRUE.equals(response.get("reserved"));
+        } catch (WebClientResponseException e) {
+            log.error("Stock reservation HTTP {} for product {}: {}",
+                    e.getStatusCode().value(), productId, e.getResponseBodyAsString());
+            throw e;
         } catch (Exception e) {
             log.error("Stock reservation failed for product {}: {}", productId, e.getMessage());
             return false;

@@ -141,7 +141,12 @@ export default function NewOrderPage() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="form-label mb-0">Line items</label>
+            <div>
+              <label className="form-label mb-0">Line items</label>
+              <p className="text-xs text-gray-500 mt-1">
+                Pick a product by name and <span className="font-medium">Stock Keeping Unit (SKU)</span>; SKU is the unique catalog code for inventory and orders.
+              </p>
+            </div>
             <button type="button" className="text-sm text-blue-600 flex items-center gap-1" onClick={addLine}>
               <Plus className="w-4 h-4" /> Add line
             </button>
@@ -164,7 +169,7 @@ export default function NewOrderPage() {
                       <option value="">— Product —</option>
                       {products.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.sku} — {p.name} (₹{p.wholesalePrice})
+                          Stock Keeping Unit (SKU) {p.sku} — {p.name} (₹{p.wholesalePrice})
                         </option>
                       ))}
                     </select>

@@ -30,8 +30,9 @@ export default function DistributorDashboard() {
       await ordersApi.approve(order.id)
       toast.success(`Order ${order.orderNumber} approved`)
       refetch()
-    } catch {
-      toast.error('Failed to approve order')
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail ?? 'Failed to approve order')
     }
   }
 

@@ -8,6 +8,8 @@ import com.edublitz.productservice.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.edublitz.productservice.security.JwtService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,6 +31,7 @@ import java.util.Map;
 public class ProductController {
 
     private final ProductService productService;
+    private final JwtService jwtService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
@@ -51,9 +54,38 @@ public class ProductController {
     @Operation(summary = "Full-text search across product names")
     public ResponseEntity<Page<Product>> search(
             @RequestParam String q,
+            @RequestParam(required = false) String distributorId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(productService.searchProducts(q, pageable));
+        return ResponseEntity.ok(productService.searchProducts(q, distributorId, pageable));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
+    @Operation(summary = "Update a product (admin: any catalog; distributor: own SKUs only)")
+    public ResponseEntity<Product> update(
+            @PathVariable String id,
+            @Valid @RequestBody ProductRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        String token = extractToken(httpRequest);
+        String role = jwtService.extractRole(token);
+        String orgId = jwtService.extractOrgId(token);
+        return ResponseEntity.ok(productService.updateProduct(id, request, role, orgId));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
+    @Operation(summary = "Deactivate a product (soft delete)")
+    public ResponseEntity<Void> deactivate(
+            @PathVariable String id,
+            HttpServletRequest httpRequest
+    ) {
+        String token = extractToken(httpRequest);
+        String role = jwtService.extractRole(token);
+        String orgId = jwtService.extractOrgId(token);
+        productService.deactivateProduct(id, role, orgId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}")
@@ -120,5 +152,10 @@ public class ProductController {
     ) {
         productService.releaseReservation(productId, quantity);
         return ResponseEntity.noContent().build();
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        return (header != null && header.startsWith("Bearer ")) ? header.substring(7) : "";
     }
 }

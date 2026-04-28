@@ -19,12 +19,18 @@ public interface ProductRepository extends MongoRepository<Product, String> {
 
     Page<Product> findByCategoryAndActiveTrue(Product.ProductCategory category, Pageable pageable);
 
+    Page<Product> findByCategoryAndDistributorIdAndActiveTrue(
+            Product.ProductCategory category, String distributorId, Pageable pageable);
+
     Page<Product> findByDistributorIdAndActiveTrue(String distributorId, Pageable pageable);
 
     Page<Product> findByActiveTrue(Pageable pageable);
 
     @Query("{ 'name': { $regex: ?0, $options: 'i' }, 'active': true }")
     Page<Product> searchByName(String namePattern, Pageable pageable);
+
+    @Query("{ 'name': { $regex: ?0, $options: 'i' }, 'active': true, 'distributorId': ?1 }")
+    Page<Product> searchByNameAndDistributor(String namePattern, String distributorId, Pageable pageable);
 
     List<Product> findByDistributorId(String distributorId);
 }

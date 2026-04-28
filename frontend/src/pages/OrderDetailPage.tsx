@@ -21,28 +21,39 @@ export default function OrderDetailPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['order', id] })
 
+  const apiErrorDetail = (err: unknown) =>
+    (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+
   const approveMutation = useMutation({
     mutationFn: () => ordersApi.approve(id!),
     onSuccess: () => { toast.success('Order approved'); invalidate() },
-    onError: () => toast.error('Failed to approve order'),
+    onError: (err: unknown) => {
+      toast.error(apiErrorDetail(err) ?? 'Failed to approve order')
+    },
   })
 
   const rejectMutation = useMutation({
     mutationFn: () => ordersApi.reject(id!, 'Rejected by distributor'),
     onSuccess: () => { toast.success('Order rejected'); invalidate() },
-    onError: () => toast.error('Failed to reject order'),
+    onError: (err: unknown) => {
+      toast.error(apiErrorDetail(err) ?? 'Failed to reject order')
+    },
   })
 
   const dispatchMutation = useMutation({
     mutationFn: () => ordersApi.dispatch(id!, `TRK-${Date.now()}`),
     onSuccess: () => { toast.success('Order dispatched'); invalidate() },
-    onError: () => toast.error('Failed to dispatch order'),
+    onError: (err: unknown) => {
+      toast.error(apiErrorDetail(err) ?? 'Failed to dispatch order')
+    },
   })
 
   const deliverMutation = useMutation({
     mutationFn: () => ordersApi.confirmDelivery(id!),
     onSuccess: () => { toast.success('Delivery confirmed'); invalidate() },
-    onError: () => toast.error('Failed to confirm delivery'),
+    onError: (err: unknown) => {
+      toast.error(apiErrorDetail(err) ?? 'Failed to confirm delivery')
+    },
   })
 
   if (isLoading) {
@@ -186,7 +197,7 @@ export default function OrderDetailPage() {
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
                 <th className="pb-3 font-medium">Product</th>
-                <th className="pb-3 font-medium">SKU</th>
+                <th className="pb-3 font-medium">Stock Keeping Unit (SKU)</th>
                 <th className="pb-3 font-medium text-center">Qty</th>
                 <th className="pb-3 font-medium text-right">Unit Price</th>
                 <th className="pb-3 font-medium text-right">GST</th>

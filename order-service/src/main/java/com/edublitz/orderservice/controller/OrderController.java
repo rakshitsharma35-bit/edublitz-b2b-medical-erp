@@ -95,7 +95,9 @@ public class OrderController {
     ) {
         String token = extractToken(httpRequest);
         String userId = jwtService.extractUserId(token);
-        return ResponseEntity.ok(orderService.approveOrder(id, userId, token));
+        String orgId = jwtService.extractOrgId(token);
+        String role = jwtService.extractRole(token);
+        return ResponseEntity.ok(orderService.approveOrder(id, userId, token, orgId, role));
     }
 
     @PatchMapping("/{id}/reject")
@@ -108,7 +110,9 @@ public class OrderController {
     ) {
         String token = extractToken(httpRequest);
         String userId = jwtService.extractUserId(token);
-        return ResponseEntity.ok(orderService.rejectOrder(id, body.get("reason"), userId));
+        String orgId = jwtService.extractOrgId(token);
+        String role = jwtService.extractRole(token);
+        return ResponseEntity.ok(orderService.rejectOrder(id, body.get("reason"), userId, orgId, role));
     }
 
     @PatchMapping("/{id}/dispatch")
@@ -121,7 +125,9 @@ public class OrderController {
     ) {
         String token = extractToken(httpRequest);
         String userId = jwtService.extractUserId(token);
-        return ResponseEntity.ok(orderService.dispatchOrder(id, body.get("trackingNumber"), userId));
+        String orgId = jwtService.extractOrgId(token);
+        String role = jwtService.extractRole(token);
+        return ResponseEntity.ok(orderService.dispatchOrder(id, body.get("trackingNumber"), userId, orgId, role));
     }
 
     @PatchMapping("/{id}/deliver")

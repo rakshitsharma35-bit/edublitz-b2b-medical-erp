@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -33,8 +34,8 @@ public class ProductService {
     private int lowStockThreshold;
 
     public Product createProduct(ProductRequest request) {
-        if (productRepository.existsBySku(request.getSku())) {
-            throw new BadRequestException("SKU already exists: " + request.getSku());
+        if (productRepository.existsBySkuAndActiveTrue(request.getSku())) {
+            throw new BadRequestException("SKU already in use by an active product: " + request.getSku());
         }
         Product product = Product.builder()
                 .sku(request.getSku())
@@ -85,7 +86,7 @@ public class ProductService {
     }
 
     public Product getProductBySku(String sku) {
-        return productRepository.findBySku(sku)
+        return productRepository.findBySkuAndActiveTrue(sku)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with SKU: " + sku));
     }
 
@@ -107,8 +108,8 @@ public class ProductService {
             request.setDistributorId(orgId);
         }
 
-        if (!existing.getSku().equals(request.getSku()) && productRepository.existsBySku(request.getSku())) {
-            throw new BadRequestException("SKU already exists: " + request.getSku());
+        if (!existing.getSku().equals(request.getSku()) && productRepository.existsBySkuAndActiveTrue(request.getSku())) {
+            throw new BadRequestException("SKU already in use by an active product: " + request.getSku());
         }
 
         applyProductRequest(existing, request);
@@ -154,9 +155,19 @@ public class ProductService {
         target.setDistributorId(r.getDistributorId());
     }
 
-    public InventoryItem addStock(StockUpdateRequest request) {
-        // Ensure the product exists
+    public InventoryItem addStock(StockUpdateRequest request, String role, String orgId) {
         Product product = getProductById(request.getProductId());
+        if (!product.isActive()) {
+            throw new BadRequestException("Cannot add stock for a removed (inactive) product");
+        }
+        if ("DISTRIBUTOR".equals(role)) {
+            if (orgId == null || !orgId.equals(product.getDistributorId())) {
+                throw new AccessDeniedException("This product is not in your catalog");
+            }
+            request.setDistributorId(orgId);
+        } else if ("ADMIN".equals(role)) {
+            request.setDistributorId(product.getDistributorId());
+        }
 
         return inventoryRepository
                 .findByProductIdAndWarehouseIdAndBatchNumber(

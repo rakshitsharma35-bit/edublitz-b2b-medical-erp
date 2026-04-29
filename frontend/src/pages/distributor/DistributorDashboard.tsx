@@ -5,12 +5,14 @@ import { productsApi } from '../../api/products'
 import { ordersApi } from '../../api/orders'
 import { statusBadge, statusLabel } from '../../utils/orderStatus'
 import { formatDistanceToNow } from 'date-fns'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import type { Order } from '../../types'
+import { useAuthStore } from '../../store/authStore'
 
 export default function DistributorDashboard() {
   const navigate = useNavigate()
+  const user = useAuthStore(s => s.user)
 
   const { data: incomingOrders, refetch } = useQuery({
     queryKey: ['orders', 'incoming'],
@@ -42,6 +44,21 @@ export default function DistributorDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Distributor Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">Manage incoming orders and inventory</p>
       </div>
+
+      {user && (
+        <div className="card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Organization ID (MongoDB)</p>
+            <p className="font-mono text-sm text-gray-900 break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mt-1">
+              {user.organizationId}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Use for products, stock batches, and incoming orders routing.</p>
+          </div>
+          <Link to="/inventory" className="btn-secondary text-sm shrink-0 inline-flex items-center justify-center">
+            Inventory / add stock
+          </Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard title="Pending Orders" value={pending.length}

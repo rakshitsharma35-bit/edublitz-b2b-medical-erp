@@ -241,6 +241,7 @@ export default function AdminOrganizationsPage() {
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="pb-3 pr-4 font-medium">Name</th>
+                <th className="pb-3 pr-4 font-medium">Organization ID</th>
                 <th className="pb-3 pr-4 font-medium">Type</th>
                 <th className="pb-3 pr-4 font-medium">Registration</th>
                 <th className="pb-3 pr-4 font-medium">Location</th>
@@ -253,6 +254,9 @@ export default function AdminOrganizationsPage() {
               {filtered.map(o => (
                 <tr key={o.id} className="text-gray-800">
                   <td className="py-3 pr-4 font-medium text-gray-900">{o.name}</td>
+                  <td className="py-3 pr-4 font-mono text-xs text-gray-700 max-w-[220px] break-all">
+                    {o.id}
+                  </td>
                   <td className="py-3 pr-4">
                     <span className={typeBadge[o.type] ?? 'badge-gray'}>{o.type}</span>
                   </td>
@@ -331,6 +335,15 @@ export default function AdminOrganizationsPage() {
             </div>
 
             <form className="p-5 space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
+              {editing && (
+                <div>
+                  <label className="form-label">Organization ID (MongoDB)</label>
+                  <p className="font-mono text-xs break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800">
+                    {editing.id}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Use this ID in orders, products, and user registration.</p>
+                </div>
+              )}
               <div>
                 <label className="form-label">Type</label>
                 <select className="form-input" {...form.register('type')}>

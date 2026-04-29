@@ -103,8 +103,14 @@ public class ProductController {
     @PostMapping("/inventory")
     @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
     @Operation(summary = "Add or update stock for a product batch")
-    public ResponseEntity<InventoryItem> addStock(@Valid @RequestBody StockUpdateRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(productService.addStock(request));
+    public ResponseEntity<InventoryItem> addStock(
+            @Valid @RequestBody StockUpdateRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        String token = extractToken(httpRequest);
+        String role = jwtService.extractRole(token);
+        String orgId = jwtService.extractOrgId(token);
+        return ResponseEntity.status(HttpStatus.CREATED).body(productService.addStock(request, role, orgId));
     }
 
     @GetMapping("/{id}/inventory")

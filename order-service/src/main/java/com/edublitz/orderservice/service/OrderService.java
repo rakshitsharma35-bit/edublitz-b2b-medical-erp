@@ -233,10 +233,9 @@ public class OrderService {
     }
 
     private static String stockShortageMessage(Order.OrderItem item) {
-        return "Insufficient stock for line item: " + item.getProductName()
-                + " (Stock Keeping Unit / SKU: " + item.getProductSku()
-                + "). Add inventory batches totaling at least " + item.getQuantity()
-                + " sellable units, or reduce the order.";
+        return "Insufficient sellable stock for «" + item.getProductName() + "» (Stock Keeping Unit / SKU: "
+                + item.getProductSku() + "). Record at least " + item.getQuantity()
+                + " units: open Inventory in the sidebar, click «Add stock (batch)», choose this product, and enter warehouse, batch, expiry, and quantity. Then try approving again.";
     }
 
     private void validateTransition(Order.OrderStatus current, Order.OrderStatus target) {

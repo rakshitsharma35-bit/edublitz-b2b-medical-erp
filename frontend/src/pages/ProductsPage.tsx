@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
-import { Package, Search, Filter, X, Pencil, Trash2 } from 'lucide-react'
+import { Package, Search, Filter, X, Pencil, Trash2, Boxes } from 'lucide-react'
 import { productsApi } from '../api/products'
 import { organizationsApi } from '../api/organizations'
 import { useAuthStore } from '../store/authStore'
@@ -561,10 +562,10 @@ export default function ProductsPage() {
                 )}
 
                 {canManageProduct(product) && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
                     <button
                       type="button"
-                      className="btn-secondary flex-1 text-xs py-2 inline-flex items-center justify-center gap-1"
+                      className="btn-secondary flex-1 min-w-[5rem] text-xs py-2 inline-flex items-center justify-center gap-1"
                       onClick={e => {
                         e.stopPropagation()
                         openEditModal(product)
@@ -573,9 +574,19 @@ export default function ProductsPage() {
                       <Pencil className="w-3.5 h-3.5" />
                       Edit
                     </button>
+                    {product.active && (
+                      <Link
+                        to={`/inventory?productId=${encodeURIComponent(product.id)}`}
+                        className="btn-secondary flex-1 min-w-[5rem] text-xs py-2 inline-flex items-center justify-center gap-1 no-underline"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <Boxes className="w-3.5 h-3.5" />
+                        Stock
+                      </Link>
+                    )}
                     <button
                       type="button"
-                      className="btn-secondary flex-1 text-xs py-2 inline-flex items-center justify-center gap-1 text-red-700 border-red-200 hover:bg-red-50"
+                      className="btn-secondary flex-1 min-w-[5rem] text-xs py-2 inline-flex items-center justify-center gap-1 text-red-700 border-red-200 hover:bg-red-50"
                       disabled={deleteMutation.isPending}
                       onClick={e => {
                         e.stopPropagation()

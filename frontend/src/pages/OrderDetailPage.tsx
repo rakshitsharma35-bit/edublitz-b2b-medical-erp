@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, XCircle, Truck, Package } from 'lucide-react'
 import { ordersApi } from '../api/orders'
 import { useAuthStore } from '../store/authStore'
@@ -89,26 +89,41 @@ export default function OrderDetailPage() {
 
       {/* Action buttons */}
       {isDistributor && order.status === 'PENDING' && (
-        <div className="flex gap-3">
-          <button
-            onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending}
-            className="btn-primary flex items-center gap-2"
-          >
-            <CheckCircle className="w-4 h-4" /> Approve Order
-          </button>
-          <button
-            onClick={() => rejectMutation.mutate()}
-            disabled={rejectMutation.isPending}
-            className="btn-danger flex items-center gap-2"
-          >
-            <XCircle className="w-4 h-4" /> Reject
-          </button>
-        </div>
+        <>
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+            <p className="font-medium text-blue-900">Before you approve</p>
+            <p className="mt-1 text-blue-900/90">
+              Approval reserves real inventory per line item. Add batches under{' '}
+              <Link to="/inventory" className="font-semibold underline hover:no-underline">
+                Inventory → Add stock (batch)
+              </Link>{' '}
+              (or use <strong>Stock</strong> on a product in the catalog) so sellable quantity covers each ordered SKU.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => approveMutation.mutate()}
+              disabled={approveMutation.isPending}
+              className="btn-primary flex items-center gap-2"
+            >
+              <CheckCircle className="w-4 h-4" /> Approve Order
+            </button>
+            <button
+              type="button"
+              onClick={() => rejectMutation.mutate()}
+              disabled={rejectMutation.isPending}
+              className="btn-danger flex items-center gap-2"
+            >
+              <XCircle className="w-4 h-4" /> Reject
+            </button>
+          </div>
+        </>
       )}
 
       {isDistributor && order.status === 'APPROVED' && (
         <button
+          type="button"
           onClick={() => dispatchMutation.mutate()}
           disabled={dispatchMutation.isPending}
           className="btn-primary flex items-center gap-2"
@@ -119,6 +134,7 @@ export default function OrderDetailPage() {
 
       {isHospital && order.status === 'DISPATCHED' && (
         <button
+          type="button"
           onClick={() => deliverMutation.mutate()}
           disabled={deliverMutation.isPending}
           className="btn-primary flex items-center gap-2"

@@ -94,7 +94,7 @@ A production-grade **Medical Domain B2B ERP** for hospitals, distributors, and a
 ## Quick Start
 
 1. **Local (no Docker):** [MANUAL_DEPLOYMENT.md](docs/MANUAL_DEPLOYMENT.md) — use app URLs with `/#/` (HashRouter), e.g. `http://localhost:5173/#/login`.
-2. **Docker Compose:** [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)
+2. **Docker Compose ([DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)):** runs **user, product, and order** APIs only; uses **MongoDB Atlas** via `.env`; the **frontend is deployed separately** (S3 + CloudFront).
 3. **Kubernetes:** [KUBERNETES_DEPLOYMENT.md](docs/KUBERNETES_DEPLOYMENT.md)
 4. **Terraform (AWS):** [TERRAFORM_DEPLOYMENT.md](docs/TERRAFORM_DEPLOYMENT.md)
 
@@ -130,4 +130,5 @@ cd user-service && mvn clean compile
 
 ## License
 
-Private / Proprietary — EduBlitz DevOps Project
+Proprietary — **Edublitz — Powered by Greamio Technologies Pvt Ltd.**  
+See the [LICENSE](LICENSE) file for the full notice. All rights reserved.

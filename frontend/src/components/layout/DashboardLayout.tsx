@@ -2,10 +2,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import {
   LayoutDashboard, Package, Boxes, ShoppingCart, Building2,
-  LogOut, Menu, X,
+  LogOut, Menu, X, Activity
 } from 'lucide-react'
-import EdublitzLogo from '../branding/EdublitzLogo'
-import BrandingFooter from '../branding/BrandingFooter'
 import { useState } from 'react'
 import clsx from 'clsx'
 
@@ -54,9 +52,11 @@ export default function DashboardLayout() {
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {/* Logo */}
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-slate-700">
-          <div className="min-w-0 flex-1">
-            <EdublitzLogo variant="onDark" size="md" />
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700">
+          <Activity className="w-7 h-7 text-blue-400" />
+          <div>
+            <p className="font-bold text-white text-base leading-tight">MedERP</p>
+            <p className="text-slate-400 text-xs">Medical B2B Platform</p>
           </div>
           <button
             className="ml-auto lg:hidden text-slate-400 hover:text-white"
@@ -121,16 +121,11 @@ export default function DashboardLayout() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <img src="/edublitz-logo.svg" alt="Edublitz" className="h-7 w-auto shrink-0" />
-          </div>
+          <span className="font-semibold text-gray-900">MedERP</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 flex flex-col min-h-0">
-          <div className="flex-1 min-h-0">
-            <Outlet />
-          </div>
-          <BrandingFooter />
+        <main className="flex-1 overflow-y-auto p-6">
+          <Outlet />
         </main>
       </div>
     </div>

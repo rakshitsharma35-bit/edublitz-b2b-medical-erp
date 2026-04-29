@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
+import { CopyrightNotice } from '../CopyrightNotice'
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'DISTRIBUTOR', 'HOSPITAL'] },
@@ -127,6 +128,10 @@ export default function DashboardLayout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
+
+        <footer className="shrink-0 border-t border-gray-200 bg-white px-6 py-3">
+          <CopyrightNotice className="text-gray-500" />
+        </footer>
       </div>
     </div>
   )

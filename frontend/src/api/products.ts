@@ -53,6 +53,9 @@ export const productsApi = {
   getLowStock: () =>
     productApi.get<InventoryItem[]>('products/inventory/low-stock').then(r => r.data),
 
+  listBatches: () =>
+    productApi.get<InventoryItem[]>('products/inventory/batches').then(r => r.data),
+
   getExpiring: (days = 30) =>
     productApi.get<InventoryItem[]>('products/inventory/expiring', { params: { days } }).then(r => r.data),
 

@@ -22,8 +22,21 @@ public interface InventoryRepository extends MongoRepository<InventoryItem, Stri
     @Query("{ 'expiryDate': { $lte: ?0 }, 'status': { $ne: 'EXPIRED' } }")
     List<InventoryItem> findExpiringBefore(LocalDate date);
 
-    @Query("{ 'quantityAvailable': { $lte: '$reorderLevel' } }")
+    /**
+     * Sellable (on-hand) = quantityAvailable − quantityReserved. Low when that is at or below reorderLevel.
+     * Uses $expr because find() cannot compare two fields with a simple $lte on a static value.
+     */
+    @Query("""
+            {
+              $expr: { $lte: [{ $subtract: ['$quantityAvailable', '$quantityReserved'] }, '$reorderLevel'] },
+              'status': { $nin: ['EXPIRED', 'QUARANTINED'] }
+            }
+            """)
     List<InventoryItem> findLowStockItems();
+
+    List<InventoryItem> findByDistributorIdOrderByProductSkuAscWarehouseIdAscBatchNumberAsc(String distributorId);
+
+    List<InventoryItem> findAllByOrderByProductSkuAscWarehouseIdAscBatchNumberAsc();
 
     List<InventoryItem> findByWarehouseId(String warehouseId);
 }

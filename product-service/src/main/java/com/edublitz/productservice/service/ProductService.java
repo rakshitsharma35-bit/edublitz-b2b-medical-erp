@@ -201,13 +201,33 @@ public class ProductService {
         return inventoryRepository.findByProductId(productId);
     }
 
-    public List<InventoryItem> getLowStockItems() {
-        return inventoryRepository.findLowStockItems();
+    public List<InventoryItem> getLowStockItems(String role, String orgId) {
+        List<InventoryItem> items = inventoryRepository.findLowStockItems();
+        if ("DISTRIBUTOR".equals(role) && orgId != null && !orgId.isBlank()) {
+            return items.stream()
+                    .filter(i -> orgId.equals(i.getDistributorId()))
+                    .toList();
+        }
+        return items;
     }
 
-    public List<InventoryItem> getExpiringItems(int daysAhead) {
+    public List<InventoryItem> listAllInventoryBatches(String role, String orgId) {
+        if ("DISTRIBUTOR".equals(role) && orgId != null && !orgId.isBlank()) {
+            return inventoryRepository
+                    .findByDistributorIdOrderByProductSkuAscWarehouseIdAscBatchNumberAsc(orgId);
+        }
+        return inventoryRepository.findAllByOrderByProductSkuAscWarehouseIdAscBatchNumberAsc();
+    }
+
+    public List<InventoryItem> getExpiringItems(int daysAhead, String role, String orgId) {
         LocalDate cutoff = LocalDate.now().plusDays(daysAhead);
-        return inventoryRepository.findExpiringBefore(cutoff);
+        List<InventoryItem> items = inventoryRepository.findExpiringBefore(cutoff);
+        if ("DISTRIBUTOR".equals(role) && orgId != null && !orgId.isBlank()) {
+            return items.stream()
+                    .filter(i -> orgId.equals(i.getDistributorId()))
+                    .toList();
+        }
+        return items;
     }
 
     /**

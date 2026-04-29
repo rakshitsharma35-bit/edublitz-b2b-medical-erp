@@ -37,6 +37,14 @@ function sellableUnits(item: InventoryItem) {
   return Math.max(0, item.quantityAvailable - item.quantityReserved)
 }
 
+function isAttentionBatch(item: InventoryItem) {
+  return (
+    item.status !== 'EXPIRED'
+    && item.status !== 'QUARANTINED'
+    && sellableUnits(item) <= item.reorderLevel
+  )
+}
+
 export default function InventoryPage() {
   const user = useAuthStore(s => s.user)
   const queryClient = useQueryClient()
@@ -52,14 +60,40 @@ export default function InventoryPage() {
     }
   }, [canManageStock, user, searchParams])
 
-  const { data: lowStock, isLoading: loadingLow } = useQuery({
-    queryKey: ['inventory', 'low-stock'],
-    queryFn: productsApi.getLowStock,
+  const inventoryEnabled =
+    !!user && (user.role === 'ADMIN' || user.role === 'DISTRIBUTOR')
+
+  const { data: batches, isLoading: loadingBatches } = useQuery({
+    queryKey: ['inventory', 'batches', user?.role, user?.organizationId],
+    queryFn: productsApi.listBatches,
+    enabled: inventoryEnabled,
   })
+
+  const lowStock = useMemo(
+    () => (batches ?? []).filter(isAttentionBatch),
+    [batches]
+  )
+
+  const { activeBatchCount, stockHealth, totalAvailableUnits } = useMemo(() => {
+    const rows = (batches ?? []).filter(
+      i => i.status !== 'EXPIRED' && i.status !== 'QUARANTINED'
+    )
+    if (rows.length === 0) {
+      return { activeBatchCount: 0, stockHealth: null as number | null, totalAvailableUnits: 0 }
+    }
+    const low = rows.filter(i => sellableUnits(i) <= i.reorderLevel).length
+    const totalAvail = rows.reduce((s, i) => s + sellableUnits(i), 0)
+    return {
+      activeBatchCount: rows.length,
+      stockHealth: Math.round(((rows.length - low) / rows.length) * 100),
+      totalAvailableUnits: totalAvail,
+    }
+  }, [batches])
 
   const { data: expiring, isLoading: loadingExp } = useQuery({
     queryKey: ['inventory', 'expiring', 30],
     queryFn: () => productsApi.getExpiring(30),
+    enabled: inventoryEnabled,
   })
 
   const { data: productCatalog } = useQuery({
@@ -184,6 +218,12 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
+      {!inventoryEnabled && (
+        <div className="card border-amber-200 bg-amber-50 text-amber-900 text-sm">
+          Inventory batches and stock levels are visible to <strong>Admin</strong> and <strong>Distributor</strong> roles.
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
@@ -332,8 +372,11 @@ export default function InventoryPage() {
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-8 h-8 text-amber-500" />
             <div>
-              <p className="text-2xl font-bold text-amber-700">{lowStock?.length ?? 0}</p>
-              <p className="text-sm text-amber-600">Low Stock Items</p>
+              <p className="text-2xl font-bold text-amber-700">{inventoryEnabled ? lowStock.length : '—'}</p>
+              <p className="text-sm text-amber-600">Low / at reorder (batches)</p>
+              <p className="text-xs text-amber-800/80 mt-1">
+                Available ≤ reorder level (excludes expired / quarantined)
+              </p>
             </div>
           </div>
         </div>
@@ -341,7 +384,7 @@ export default function InventoryPage() {
           <div className="flex items-center gap-3">
             <Clock className="w-8 h-8 text-red-500" />
             <div>
-              <p className="text-2xl font-bold text-red-700">{expiring?.length ?? 0}</p>
+              <p className="text-2xl font-bold text-red-700">{inventoryEnabled ? (expiring?.length ?? 0) : '—'}</p>
               <p className="text-sm text-red-600">Expiring in 30 days</p>
             </div>
           </div>
@@ -351,21 +394,104 @@ export default function InventoryPage() {
             <CheckCircle className="w-8 h-8 text-green-500" />
             <div>
               <p className="text-2xl font-bold text-green-700">
-                {Math.max(0, (lowStock?.length ?? 0) === 0 ? 100 : 85)}%
+                {inventoryEnabled ? (stockHealth !== null ? `${stockHealth}%` : '—') : '—'}
               </p>
-              <p className="text-sm text-green-600">Stock Health</p>
+              <p className="text-sm text-green-600">Stock health</p>
+              <p className="text-xs text-green-800/80 mt-1">
+                {inventoryEnabled && activeBatchCount > 0
+                  ? `${activeBatchCount} active batch(es) · ${totalAvailableUnits.toLocaleString()} units available to ship`
+                  : inventoryEnabled
+                    ? 'Add stock batches to see health'
+                    : ''}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Full batch list — available (sellable) highlighted */}
+      {inventoryEnabled && (
+        <div className="card">
+          <h3 className="font-semibold text-gray-900 mb-1">Stock by batch</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            <strong>Available</strong> = stored quantity minus reserved (what you can still allocate to new orders).
+          </p>
+          {loadingBatches ? (
+            <div className="animate-pulse space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-10 bg-gray-100 rounded" />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                    <th className="pb-3 font-medium">Product</th>
+                    <th className="pb-3 font-medium">SKU</th>
+                    <th className="pb-3 font-medium">Warehouse</th>
+                    <th className="pb-3 font-medium">Batch</th>
+                    <th className="pb-3 font-medium text-right">Available</th>
+                    <th className="pb-3 font-medium text-right">Stored</th>
+                    <th className="pb-3 font-medium text-right">Reserved</th>
+                    <th className="pb-3 font-medium text-right">Reorder at</th>
+                    <th className="pb-3 font-medium">Expiry</th>
+                    <th className="pb-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {(batches ?? []).map(item => {
+                    const avail = sellableUnits(item)
+                    const low = isAttentionBatch(item)
+                    return (
+                      <tr
+                        key={item.id}
+                        className={low ? 'bg-amber-50/70 hover:bg-amber-50' : 'hover:bg-gray-50'}
+                      >
+                        <td className="py-3 font-medium text-gray-900">{item.productName}</td>
+                        <td className="py-3 font-mono text-xs text-gray-600">{item.productSku}</td>
+                        <td className="py-3 text-gray-600">{item.warehouseId}</td>
+                        <td className="py-3 text-gray-600 font-mono text-xs">{item.batchNumber}</td>
+                        <td className="py-3 text-right font-bold tabular-nums text-gray-900">{avail}</td>
+                        <td className="py-3 text-right text-gray-600 tabular-nums">{item.quantityAvailable}</td>
+                        <td className="py-3 text-right text-gray-600 tabular-nums">{item.quantityReserved}</td>
+                        <td className="py-3 text-right text-gray-600 tabular-nums">{item.reorderLevel}</td>
+                        <td className="py-3 text-gray-600">
+                          {item.expiryDate
+                            ? format(new Date(item.expiryDate), 'dd MMM yyyy')
+                            : '—'}
+                        </td>
+                        <td className="py-3">
+                          <span className={statusBadge[item.status]}>{item.status.replace('_', ' ')}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {(batches ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="py-8 text-center text-gray-400">
+                        No inventory batches yet. Use <strong>Add stock (batch)</strong> to record receipt.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Low stock table */}
+      {inventoryEnabled && (
       <div className="card">
-        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-500" />
-          Low Stock Items
+          Batches at or below reorder
         </h3>
-        {loadingLow ? (
+        <p className="text-sm text-gray-500 mb-4">
+          Same rule as above: <strong>available</strong> (sellable) ≤ reorder threshold.
+        </p>
+        {loadingBatches ? (
           <div className="animate-pulse space-y-3">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="h-10 bg-gray-100 rounded" />
@@ -380,33 +506,33 @@ export default function InventoryPage() {
                   <th className="pb-3 font-medium">Stock Keeping Unit (SKU)</th>
                   <th className="pb-3 font-medium">Warehouse</th>
                   <th className="pb-3 font-medium">Batch</th>
-                  <th className="pb-3 font-medium">Stored qty</th>
-                  <th className="pb-3 font-medium">Sellable</th>
-                  <th className="pb-3 font-medium">Reserved</th>
-                  <th className="pb-3 font-medium">Reorder At</th>
+                  <th className="pb-3 font-medium text-right">Available</th>
+                  <th className="pb-3 font-medium text-right">Stored</th>
+                  <th className="pb-3 font-medium text-right">Reserved</th>
+                  <th className="pb-3 font-medium text-right">Reorder at</th>
                   <th className="pb-3 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {lowStock?.map(item => (
+                {lowStock.map(item => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="py-3 font-medium text-gray-900">{item.productName}</td>
                     <td className="py-3 font-mono text-xs text-gray-600">{item.productSku}</td>
                     <td className="py-3 text-gray-600">{item.warehouseId}</td>
                     <td className="py-3 text-gray-600 font-mono text-xs">{item.batchNumber}</td>
-                    <td className="py-3 text-gray-700">{item.quantityAvailable}</td>
-                    <td className="py-3 font-semibold text-amber-600">{sellableUnits(item)}</td>
-                    <td className="py-3 text-gray-600">{item.quantityReserved}</td>
-                    <td className="py-3 text-gray-600">{item.reorderLevel}</td>
+                    <td className="py-3 text-right font-bold text-amber-700 tabular-nums">{sellableUnits(item)}</td>
+                    <td className="py-3 text-right text-gray-700 tabular-nums">{item.quantityAvailable}</td>
+                    <td className="py-3 text-right text-gray-600 tabular-nums">{item.quantityReserved}</td>
+                    <td className="py-3 text-right text-gray-600 tabular-nums">{item.reorderLevel}</td>
                     <td className="py-3">
                       <span className={statusBadge[item.status]}>{item.status.replace('_', ' ')}</span>
                     </td>
                   </tr>
                 ))}
-                {lowStock?.length === 0 && (
+                {lowStock.length === 0 && (
                   <tr>
                     <td colSpan={9} className="py-8 text-center text-gray-400">
-                      No low stock items — all healthy!
+                      No batches are at reorder right now — or you have not added inventory yet.
                     </td>
                   </tr>
                 )}
@@ -415,6 +541,7 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Expiring soon */}
       <div className="card">
@@ -422,7 +549,9 @@ export default function InventoryPage() {
           <Clock className="w-4 h-4 text-red-500" />
           Expiring Within 30 Days
         </h3>
-        {loadingExp ? (
+        {!inventoryEnabled ? (
+          <p className="text-gray-500 text-sm py-4">—</p>
+        ) : loadingExp ? (
           <div className="animate-pulse space-y-3">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="h-10 bg-gray-100 rounded" />
@@ -437,7 +566,8 @@ export default function InventoryPage() {
                   <th className="pb-3 font-medium">Stock Keeping Unit (SKU)</th>
                   <th className="pb-3 font-medium">Batch</th>
                   <th className="pb-3 font-medium">Expiry Date</th>
-                  <th className="pb-3 font-medium">Quantity</th>
+                  <th className="pb-3 font-medium text-right">Available</th>
+                  <th className="pb-3 font-medium text-right">Stored</th>
                   <th className="pb-3 font-medium">Status</th>
                 </tr>
               </thead>
@@ -450,7 +580,8 @@ export default function InventoryPage() {
                     <td className="py-3 text-red-600 font-medium">
                       {format(new Date(item.expiryDate), 'dd MMM yyyy')}
                     </td>
-                    <td className="py-3 text-gray-700">{item.quantityAvailable}</td>
+                    <td className="py-3 text-right font-medium text-gray-900 tabular-nums">{sellableUnits(item)}</td>
+                    <td className="py-3 text-right text-gray-700 tabular-nums">{item.quantityAvailable}</td>
                     <td className="py-3">
                       <span className={statusBadge[item.status]}>{item.status.replace('_', ' ')}</span>
                     </td>
@@ -458,7 +589,7 @@ export default function InventoryPage() {
                 ))}
                 {expiring?.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-400">
+                    <td colSpan={7} className="py-8 text-center text-gray-400">
                       No items expiring in the next 30 days
                     </td>
                   </tr>

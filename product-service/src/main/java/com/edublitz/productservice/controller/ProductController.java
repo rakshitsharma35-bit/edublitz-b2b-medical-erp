@@ -122,17 +122,34 @@ public class ProductController {
     @GetMapping("/inventory/low-stock")
     @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
     @Operation(summary = "Get all low-stock items")
-    public ResponseEntity<List<InventoryItem>> getLowStock() {
-        return ResponseEntity.ok(productService.getLowStockItems());
+    public ResponseEntity<List<InventoryItem>> getLowStock(HttpServletRequest httpRequest) {
+        String token = extractToken(httpRequest);
+        String role = jwtService.extractRole(token);
+        String orgId = jwtService.extractOrgId(token);
+        return ResponseEntity.ok(productService.getLowStockItems(role, orgId));
+    }
+
+    @GetMapping("/inventory/batches")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
+    @Operation(summary = "List all inventory batches (scoped to distributor when applicable)")
+    public ResponseEntity<List<InventoryItem>> listInventoryBatches(HttpServletRequest httpRequest) {
+        String token = extractToken(httpRequest);
+        String role = jwtService.extractRole(token);
+        String orgId = jwtService.extractOrgId(token);
+        return ResponseEntity.ok(productService.listAllInventoryBatches(role, orgId));
     }
 
     @GetMapping("/inventory/expiring")
     @PreAuthorize("hasAnyRole('ADMIN', 'DISTRIBUTOR')")
     @Operation(summary = "Get items expiring within N days")
     public ResponseEntity<List<InventoryItem>> getExpiring(
-            @RequestParam(defaultValue = "30") int days
+            @RequestParam(defaultValue = "30") int days,
+            HttpServletRequest httpRequest
     ) {
-        return ResponseEntity.ok(productService.getExpiringItems(days));
+        String token = extractToken(httpRequest);
+        String role = jwtService.extractRole(token);
+        String orgId = jwtService.extractOrgId(token);
+        return ResponseEntity.ok(productService.getExpiringItems(days, role, orgId));
     }
 
     /**

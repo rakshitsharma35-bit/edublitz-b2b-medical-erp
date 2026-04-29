@@ -150,6 +150,8 @@ export default function ProductsPage() {
     } else {
       form.reset(emptyFormDefaults(user))
     }
+    // Intentionally depend on product id, not whole `editingProduct`, to avoid redundant resets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form.reset is stable; including `form` re-runs every render
   }, [addOpen, editingProduct?.id, user, form.reset])
 
   useEffect(() => {
@@ -159,6 +161,7 @@ export default function ProductsPage() {
     if (only?.id && !form.getValues('distributorId')) {
       form.setValue('distributorId', only.id)
     }
+    // `form` identity changes; methods are stable for this gated effect.
   }, [addOpen, user?.role, editingProduct, activeDistributors, form])
 
   const closeProductModal = () => {

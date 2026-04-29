@@ -30,13 +30,13 @@ export default function NewOrderPage() {
     queryFn: () => productsApi.list({ page: 0, size: 200 }),
   })
 
-  const products = productPage?.content ?? []
+  const catalogProducts = useMemo(() => productPage?.content ?? [], [productPage?.content])
 
   const productById = useMemo(() => {
     const m = new Map<string, Product>()
-    products.forEach(p => m.set(p.id, p))
+    catalogProducts.forEach(p => m.set(p.id, p))
     return m
-  }, [products])
+  }, [catalogProducts])
 
   const createMut = useMutation({
     mutationFn: ordersApi.create,
@@ -153,7 +153,7 @@ export default function NewOrderPage() {
           </div>
           {productsLoading ? (
             <p className="text-sm text-gray-500">Loading products…</p>
-          ) : products.length === 0 ? (
+          ) : catalogProducts.length === 0 ? (
             <p className="text-sm text-amber-700">No products in catalog yet.</p>
           ) : (
             <div className="space-y-3">
@@ -167,7 +167,7 @@ export default function NewOrderPage() {
                       onChange={e => updateLine(idx, { productId: e.target.value })}
                     >
                       <option value="">— Product —</option>
-                      {products.map(p => (
+                      {catalogProducts.map(p => (
                         <option key={p.id} value={p.id}>
                           Stock Keeping Unit (SKU) {p.sku} — {p.name} (₹{p.wholesalePrice})
                         </option>

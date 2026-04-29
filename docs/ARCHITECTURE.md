@@ -93,8 +93,9 @@ Distributor User
     │ PATCH /orders/{id}/approve
     ▼
 order-service
-    │ 1. Validate JWT (distributor role)
-    │ 2. POST /products/inventory/reserve → product-service
+    │ 1. Validate JWT; distributor org must match order (ADMIN excepted)
+    │ 2. POST /products/inventory/reserve → product-service (JWT forwarded)
+    │    Reservations may span batches; failure rolls back partial reserves
     │ 3. Update order (status=APPROVED)
     │ 4. Return updated order
     ▼
@@ -104,6 +105,16 @@ order-service
     │ 2. Update status=DISPATCHED with trackingNumber
 ```
 
+## Inventory & stock (product-service)
+
+| Concern | Behavior |
+|---------|----------|
+| Batches | `POST /products/inventory` upserts by `(productId, warehouseId, batchNumber)` |
+| List | `GET /products/inventory/batches` — all batches (ADMIN) or filtered by distributor org |
+| Low stock | `GET /products/inventory/low-stock` — sellable ≤ `reorderLevel` via Mongo `$expr` |
+| Approve | order-service calls `/products/inventory/reserve`; sellable = `quantityAvailable − quantityReserved` |
+| SKU reuse | Uniqueness enforced among **active** products; soft-deleted rows free the code |
+
 ## MongoDB Index Strategy
 
 ```
@@ -112,9 +123,9 @@ users_db.users:
   - organizationId              ← org-scoped queries
 
 products_db.products:
-  - sku (unique)                ← fast lookup by SKU
   - (category, active)          ← catalog filtering
   - distributorId               ← distributor scope
+  - SKU uniqueness for active catalog enforced in application service
 
 products_db.inventory:
   - (productId, warehouseId, batchNumber) unique   ← dedup

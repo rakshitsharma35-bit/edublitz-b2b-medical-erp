@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="edublitzGrad" x1="4" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#edublitzGrad)"/>
+  <path d="M11 10h18v4h-15v8h12v4h-12v12h-3V10z" fill="#fff" fill-opacity="0.95"/>
+  <text x="48" y="26" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="18" font-weight="700" fill="#0f172a" letter-spacing="-0.02em">Edublitz</text>
+</svg>

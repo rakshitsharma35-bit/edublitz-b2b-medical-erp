@@ -4,9 +4,10 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
-import { Activity } from 'lucide-react'
 import { authApi } from '../../api/auth'
 import { useAuthStore } from '../../store/authStore'
+import EdublitzLogo from '../../components/branding/EdublitzLogo'
+import BrandingFooter from '../../components/branding/BrandingFooter'
 
 const schema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -26,14 +27,14 @@ export default function RegisterPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [loading, setLoading] = useState(false)
 
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />
-  }
-
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { role: 'HOSPITAL' },
   })
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -52,17 +53,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-2xl mb-4">
-            <Activity className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="flex flex-col items-center mb-8">
+            <EdublitzLogo variant="onDark" size="md" className="justify-center" />
+            <p className="text-slate-400 text-sm mt-3">Create your account</p>
           </div>
-          <h1 className="text-2xl font-bold text-white">MedERP</h1>
-          <p className="text-slate-400 text-sm mt-1">Create your account</p>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Create account</h2>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -126,7 +125,9 @@ export default function RegisterPage() {
             <Link to="/login" className="text-blue-600 font-medium hover:underline">Sign in</Link>
           </p>
         </div>
+        </div>
       </div>
+      <BrandingFooter variant="light" />
     </div>
   )
 }

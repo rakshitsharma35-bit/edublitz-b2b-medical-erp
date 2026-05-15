@@ -60,12 +60,20 @@ find k8s/deployments/ -name "*.yaml" -exec \
 
 ---
 
-## Step 4 — Configure Secrets
+## Step 4 — Namespace, then Secrets
 
-**Never commit real values to Git.** Populate secrets:
+Kubernetes will error with **namespace not found** if you create a `Secret` in `med-erp` before the namespace exists.
 
 ```bash
-# MongoDB Atlas connection strings
+# Always apply this first
+kubectl apply -f k8s/namespace/
+
+kubectl get ns med-erp   # should show Active
+```
+
+**Never commit real secrets to Git.** Create the secret **after** the namespace exists:
+
+```bash
 kubectl create secret generic app-secrets \
   -n med-erp \
   --from-literal=MONGODB_URI_USER="mongodb+srv://..." \
@@ -74,6 +82,8 @@ kubectl create secret generic app-secrets \
   --from-literal=JWT_SECRET="your-256-bit-hex-secret" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+(Optional) If you use `k8s/secrets/app-secrets.yaml`, apply it **only after** `k8s/namespace/` and replace placeholder values — prefer `kubectl create secret` above for production.
 
 ---
 
@@ -173,5 +183,7 @@ kubectl rollout undo deployment/user-service -n med-erp
 | Pod in CrashLoopBackOff        | `kubectl logs <pod> -n med-erp --previous`        |
 | Pod in Pending                 | `kubectl describe pod <pod> -n med-erp`           |
 | Ingress has no ADDRESS         | Check ALB controller logs in kube-system ns       |
+| **Error: namespace "med-erp" not found** (secrets / apply) | Run **`kubectl apply -f k8s/namespace/`** before secrets or workloads |
+| Pod **0/1 Ready**, app logs look healthy | Readiness uses `/actuator/health/readiness` — ensure services enable **`management.endpoint.health.probes.enabled=true`** and permit **`/actuator/health/**`** in security (fixed in repo); rebuild images and rollout |
 | Service not reachable          | Check `kubectl describe svc <svc> -n med-erp`     |
 | Secret missing                 | `kubectl get secret app-secrets -n med-erp`       |

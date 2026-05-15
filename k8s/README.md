@@ -5,9 +5,12 @@ Namespace: **`med-erp`**. Run from repo root so paths resolve.
 ## Apply order
 
 ```bash
+# 1. Namespace first (required — avoids "namespace not found" on secrets/workloads)
 kubectl apply -f k8s/namespace/
+
 kubectl apply -f k8s/configmaps/
-# Secrets: use kubectl create secret … per docs/KUBERNETES_DEPLOYMENT.md (do not commit real secrets)
+# 2. Secrets only after namespace exists — see docs/KUBERNETES_DEPLOYMENT.md
+#    kubectl create secret generic app-secrets -n med-erp ...
 kubectl apply -f k8s/deployments/
 kubectl apply -f k8s/services/
 kubectl apply -f k8s/hpa/

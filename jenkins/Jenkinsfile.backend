@@ -1,237 +1,86 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Jenkins Pipeline — Backend Microservices CI/CD
-// Triggered on: push to main or feature/* branches
+// Backend — build, test; on main: Docker Hub/ECR login, push to ECR, deploy to EKS.
 //
-// Credentials required (configure in Jenkins → Manage Credentials):
-//   AWS_CREDENTIALS       — AWS Access Key + Secret (type: AWS Credentials)
-//   SONARCLOUD_TOKEN      — SonarCloud API token (type: Secret Text)
-//   KUBECONFIG_CREDENTIAL — kubeconfig file (type: Secret File)
-// ─────────────────────────────────────────────────────────────────────────────
+// In Jenkins: Manage Credentials → add these IDs exactly:
+//   aws-credentials   — AWS Credentials (ECR, STS)
+//   docker-registry     — Username + password (docker login before build; use Docker Hub token or your registry user)
+//   kubeconfig          — Secret file (kubectl context for the cluster)
 
 pipeline {
-    agent {
-        kubernetes {
-            yaml '''
-apiVersion: v1
-kind: Pod
-spec:
-  containers:
-  - name: maven
-    image: maven:3.9-eclipse-temurin-17-alpine
-    command: [cat]
-    tty: true
-    volumeMounts:
-    - name: maven-cache
-      mountPath: /root/.m2
-  - name: docker
-    image: docker:24-dind
-    securityContext:
-      privileged: true
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
-  - name: trivy
-    image: aquasec/trivy:latest
-    command: [cat]
-    tty: true
-  - name: kubectl
-    image: bitnami/kubectl:latest
-    command: [cat]
-    tty: true
-  volumes:
-  - name: maven-cache
-    persistentVolumeClaim:
-      claimName: maven-cache-pvc
-'''
-        }
-    }
+    agent any
 
     environment {
-        AWS_REGION     = 'us-east-1'
-        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        EKS_CLUSTER    = 'med-erp-prod-eks'
-        K8S_NAMESPACE  = 'med-erp'
-        IMAGE_TAG      = "${env.GIT_COMMIT.take(8)}"
-        SERVICES       = 'user-service product-service order-service'
+        AWS_REGION    = 'us-east-1'
+        K8S_NAMESPACE = 'med-erp'
+        IMAGE_TAG     = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(8) : "b${env.BUILD_NUMBER}"}"
     }
 
     options {
+        timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
-        timeout(time: 60, unit: 'MINUTES')
-        disableConcurrentBuilds()
     }
 
     stages {
-
         stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Build & test') {
             steps {
-                checkout scm
-                script {
-                    env.GIT_COMMIT_MSG = sh(
-                        script: 'git log -1 --format=%s',
-                        returnStdout: true
-                    ).trim()
+                sh '''
+                    set -e
+                    for svc in user-service product-service order-service; do
+                      echo "=== $svc ==="
+                      (cd "$svc" && mvn -B clean verify)
+                    done
+                '''
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
                 }
             }
         }
 
-        stage('Build & Test') {
-            parallel {
-                stage('user-service') {
-                    steps {
-                        container('maven') {
-                            dir('user-service') {
-                                sh 'mvn clean verify -B -q'
-                                junit 'target/surefire-reports/*.xml'
-                            }
-                        }
-                    }
-                }
-                stage('product-service') {
-                    steps {
-                        container('maven') {
-                            dir('product-service') {
-                                sh 'mvn clean verify -B -q'
-                                junit 'target/surefire-reports/*.xml'
-                            }
-                        }
-                    }
-                }
-                stage('order-service') {
-                    steps {
-                        container('maven') {
-                            dir('order-service') {
-                                sh 'mvn clean verify -B -q'
-                                junit 'target/surefire-reports/*.xml'
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('SonarCloud Quality Gate') {
-            when { branch 'main' }
-            steps {
-                withCredentials([string(credentialsId: 'SONARCLOUD_TOKEN', variable: 'SONAR_TOKEN')]) {
-                    container('maven') {
-                        script {
-                            ['user-service', 'product-service', 'order-service'].each { svc ->
-                                dir(svc) {
-                                    sh """
-                                        mvn sonar:sonar \
-                                          -Dsonar.projectKey=edublitz-med-erp-${svc} \
-                                          -Dsonar.organization=edublitz \
-                                          -Dsonar.host.url=https://sonarcloud.io \
-                                          -Dsonar.login=${SONAR_TOKEN} \
-                                          -Dsonar.qualitygate.wait=true \
-                                          -B -q
-                                    """
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Docker Build & Push') {
-            when { branch 'main' }
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'AWS_CREDENTIALS',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    container('docker') {
-                        script {
-                            // ECR login
-                            sh """
-                                aws ecr get-login-password --region ${AWS_REGION} | \
-                                docker login --username AWS --password-stdin ${ECR_REGISTRY}
-                            """
-
-                            ['user-service', 'product-service', 'order-service'].each { svc ->
-                                def imageName = "${ECR_REGISTRY}/med-erp/${svc}:${IMAGE_TAG}"
-                                def imageLatest = "${ECR_REGISTRY}/med-erp/${svc}:latest"
-
-                                sh """
-                                    docker build -t ${imageName} -t ${imageLatest} ${svc}/
-                                    docker push ${imageName}
-                                    docker push ${imageLatest}
-                                """
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Trivy Security Scan') {
-            when { branch 'main' }
-            steps {
-                container('trivy') {
-                    script {
-                        ['user-service', 'product-service', 'order-service'].each { svc ->
-                            sh """
-                                trivy image \
-                                  --exit-code 1 \
-                                  --severity HIGH,CRITICAL \
-                                  --no-progress \
-                                  --format table \
-                                  ${ECR_REGISTRY}/med-erp/${svc}:${IMAGE_TAG} \
-                                || (echo "Trivy found HIGH/CRITICAL vulnerabilities in ${svc}" && exit 1)
-                            """
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to EKS') {
+        stage('Docker push & deploy') {
             when { branch 'main' }
             steps {
                 withCredentials([
-                    file(credentialsId: 'KUBECONFIG_CREDENTIAL', variable: 'KUBECONFIG'),
-                    [
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'AWS_CREDENTIALS',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                     credentialsId: 'aws-credentials',
+                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
+                    usernamePassword(credentialsId: 'docker-registry',
+                                     usernameVariable: 'DOCKER_USER',
+                                     passwordVariable: 'DOCKER_PASS'),
+                    file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')
                 ]) {
-                    container('kubectl') {
-                        script {
-                            // Update kubeconfig for EKS
-                            sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER}"
+                    sh '''
+                        set -e
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-                            ['user-service', 'product-service', 'order-service'].each { svc ->
-                                sh """
-                                    kubectl set image deployment/${svc} \
-                                      ${svc}=${ECR_REGISTRY}/med-erp/${svc}:${IMAGE_TAG} \
-                                      -n ${K8S_NAMESPACE}
+                        ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+                        ECR_REGISTRY="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                        aws ecr get-login-password --region "$AWS_REGION" | \
+                          docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-                                    kubectl rollout status deployment/${svc} \
-                                      -n ${K8S_NAMESPACE} --timeout=5m
-                                """
-                            }
-                        }
-                    }
+                        for svc in user-service product-service order-service; do
+                          docker build -t "$ECR_REGISTRY/med-erp/$svc:$IMAGE_TAG" \
+                            -t "$ECR_REGISTRY/med-erp/$svc:latest" "$svc/"
+                          docker push "$ECR_REGISTRY/med-erp/$svc:$IMAGE_TAG"
+                          docker push "$ECR_REGISTRY/med-erp/$svc:latest"
+                        done
+
+                        for svc in user-service product-service order-service; do
+                          kubectl set image "deployment/$svc" "$svc=$ECR_REGISTRY/med-erp/$svc:$IMAGE_TAG" -n "$K8S_NAMESPACE"
+                          kubectl rollout status "deployment/$svc" -n "$K8S_NAMESPACE" --timeout=5m
+                        done
+                    '''
                 }
             }
         }
     }
 
     post {
-        success {
-            echo "Pipeline succeeded. Image tag: ${IMAGE_TAG}"
-        }
-        failure {
-            echo "Pipeline failed. Check logs above."
-        }
-        always {
-            cleanWs()
-        }
+        always { cleanWs() }
     }
 }

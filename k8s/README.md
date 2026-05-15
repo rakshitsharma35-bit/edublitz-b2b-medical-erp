@@ -17,7 +17,8 @@ kubectl apply -f services/
 # 4. Autoscaling
 kubectl apply -f hpa/
 
-# 5. Ingress (after ALB controller is installed)
+# 5. AWS ALB Ingress (after AWS Load Balancer Controller is installed)
+#    ingressclass.yaml + ingress.yaml (ALB via ingressClassName: alb)
 kubectl apply -f ingress/
 ```
 

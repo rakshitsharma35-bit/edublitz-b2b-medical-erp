@@ -1,6 +1,7 @@
-# AWS ALB Ingress Controller — routes external traffic to microservices
+# AWS Application Load Balancer (ALB) via AWS Load Balancer Controller
 # Prerequisites:
-#   - AWS Load Balancer Controller installed on EKS
+#   - AWS Load Balancer Controller installed on EKS (see KUBERNETES_DEPLOYMENT.md)
+#   - IngressClass "alb" (apply ingressclass.yaml or use Helm defaults)
 #   - ACM certificate ARN for your domain
 #   - Route53 hosted zone configured
 apiVersion: networking.k8s.io/v1
@@ -9,8 +10,6 @@ metadata:
   name: med-erp-ingress
   namespace: med-erp
   annotations:
-    # ALB annotations
-    kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/load-balancer-name: med-erp-alb
@@ -35,6 +34,7 @@ metadata:
     # Tags
     alb.ingress.kubernetes.io/tags: "Environment=production,Project=med-erp"
 spec:
+  ingressClassName: alb
   rules:
     - host: api.med-erp.yourdomain.com
       http:

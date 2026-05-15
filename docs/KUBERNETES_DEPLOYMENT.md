@@ -41,6 +41,7 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 
 # Verify
 kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+kubectl get ingressclass
 ```
 
 ---
@@ -92,10 +93,11 @@ kubectl apply -f k8s/services/
 # Horizontal Pod Autoscalers
 kubectl apply -f k8s/hpa/
 
-# Ingress (ALB) — update certificate ARN and SG first
+# AWS ALB Ingress — update certificate ARN and SG first
 # Edit k8s/ingress/ingress.yaml:
 #   alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:...
 #   alb.ingress.kubernetes.io/security-groups: sg-...
+# Applies IngressClass "alb" + Ingress (spec.ingressClassName: alb)
 kubectl apply -f k8s/ingress/
 ```
 

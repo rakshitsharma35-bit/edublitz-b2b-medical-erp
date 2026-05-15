@@ -1,38 +1,32 @@
-# Kubernetes Deployment Guide
+# Kubernetes
 
-## Apply order (respect dependencies)
+Namespace: **`med-erp`**. Run from repo root so paths resolve.
 
-```bash
-# 1. Namespace
-kubectl apply -f namespace/
-
-# 2. Config
-kubectl apply -f configmaps/
-kubectl apply -f secrets/
-
-# 3. Workloads
-kubectl apply -f deployments/
-kubectl apply -f services/
-
-# 4. Autoscaling
-kubectl apply -f hpa/
-
-# 5. AWS ALB Ingress (after AWS Load Balancer Controller is installed)
-#    ingressclass.yaml + ingress.yaml (ALB via ingressClassName: alb)
-kubectl apply -f ingress/
-```
-
-## Check status
+## Apply order
 
 ```bash
-kubectl get pods -n med-erp
-kubectl get svc  -n med-erp
-kubectl get ingress -n med-erp
+kubectl apply -f k8s/namespace/
+kubectl apply -f k8s/configmaps/
+# Secrets: use kubectl create secret … per docs/KUBERNETES_DEPLOYMENT.md (do not commit real secrets)
+kubectl apply -f k8s/deployments/
+kubectl apply -f k8s/services/
+kubectl apply -f k8s/hpa/
+
+# After AWS Load Balancer Controller is installed (EKS):
+# IngressClass alb + Ingress — see k8s/ingress/
+kubectl apply -f k8s/ingress/
 ```
 
-## Image substitution
+## Status
 
-Replace `YOUR_ECR_REGISTRY` in deployment YAMLs with your actual ECR registry URL:
+```bash
+kubectl get pods,svc,ingress -n med-erp
+kubectl get ingressclass
 ```
-123456789012.dkr.ecr.us-east-1.amazonaws.com
-```
+
+## Images
+
+Replace `YOUR_ECR_REGISTRY` in deployments with your ECR URL, e.g.  
+`123456789012.dkr.ecr.us-east-1.amazonaws.com`
+
+Details: [docs/KUBERNETES_DEPLOYMENT.md](../docs/KUBERNETES_DEPLOYMENT.md).

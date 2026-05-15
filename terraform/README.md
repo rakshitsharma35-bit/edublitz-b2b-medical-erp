@@ -1,23 +1,23 @@
-# Terraform Infrastructure
+# Terraform
 
-## Module Structure
+AWS modules: VPC, EKS, ECR, S3 + CloudFront, Route53.
+
+## Layout
 
 ```
 terraform/
 ├── modules/
-│   ├── vpc/            # VPC, subnets, NAT gateways
-│   ├── eks/            # EKS cluster, node groups, OIDC
-│   ├── ecr/            # Container registries for all services
-│   ├── s3-cloudfront/  # Frontend static hosting + CDN
-│   └── route53/        # DNS records
+│   ├── vpc/
+│   ├── eks/
+│   ├── ecr/
+│   ├── s3-cloudfront/
+│   └── route53/
 └── env/
-    ├── dev/            # Development environment (Spot nodes)
-    └── prod/           # Production environment (ON_DEMAND nodes)
+    ├── dev/
+    └── prod/
 ```
 
-## Bootstrap (first time only)
-
-Create the S3 bucket and DynamoDB table for remote state:
+## Remote state (once per account/region)
 
 ```bash
 aws s3 mb s3://med-erp-terraform-state-dev --region us-east-1
@@ -30,20 +30,21 @@ aws dynamodb create-table \
   --region us-east-1
 ```
 
-## Deploy Dev
+## Deploy dev
 
 ```bash
 cd terraform/env/dev
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
+# Edit terraform.tfvars — file is gitignored; never commit secrets
 terraform init
-terraform plan -out=tfplan
-terraform apply tfplan
+terraform plan -out=tfplan && terraform apply tfplan
 ```
 
-## Configure kubectl
+## kubectl
 
 ```bash
-aws eks update-kubeconfig --region us-east-1 --name med-erp-dev-eks
+aws eks update-kubeconfig --region us-east-1 --name <cluster-from-output>
 kubectl get nodes
 ```
+
+More: [docs/TERRAFORM_DEPLOYMENT.md](../docs/TERRAFORM_DEPLOYMENT.md).

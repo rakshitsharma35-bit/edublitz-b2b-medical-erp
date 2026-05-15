@@ -1,12 +1,19 @@
 # Java / Maven
 target/
+**/target/
 *.class
 *.jar
 *.war
 *.ear
+jacoco.exec
+**/jacoco.exec
 .mvn/
 !.mvn/wrapper/maven-wrapper.jar
 !.mvn/wrapper/maven-wrapper.properties
+
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log
 
 # IDE
 .idea/
@@ -21,10 +28,11 @@ target/
 .DS_Store
 Thumbs.db
 
-# Secrets / env
+# Secrets / env (keep *.example tracked)
 .env
 .env.local
 .env.*.local
+.envrc
 
 # Node
 node_modules/
@@ -33,9 +41,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Frontend build
+# Frontend build & cache
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
+.turbo/
 
 # Terraform
 terraform/.terraform/

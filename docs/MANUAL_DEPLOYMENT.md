@@ -33,26 +33,27 @@ brew services start mongodb-community@7.0
 
 ---
 
-## Step 2 — User Service (Port 8081)
-
-Use one shared secret for all three JVMs, for example:
+## Step 2 — Shared JWT secret (all backends)
 
 ```bash
 export JWT_SECRET="$(openssl rand -base64 32)"
+echo "$JWT_SECRET"   # copy into each service `.env` as JWT_SECRET=
 ```
+
+---
+
+## Step 3 — User Service (Port 8081)
 
 ```bash
 cd user-service
-
-# Copy and configure environment
 cp .env.example .env
-# Edit .env — set MONGODB_URI; set JWT_SECRET to the same value as $JWT_SECRET above
+# Edit .env — MONGODB_URI and JWT_SECRET (same secret for all three services).
 
-# Build and run
+export JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home -v 17 2>/dev/null || true)}"
 mvn clean package -DskipTests
-java -jar target/user-service-1.0.0.jar \
-  --MONGODB_URI="mongodb://localhost:27017/users_db" \
-  --JWT_SECRET="$JWT_SECRET"
+
+set -a && [ -f .env ] && . ./.env; set +a
+java -jar target/user-service-1.0.0.jar
 ```
 
 **Verify:** `curl http://localhost:8081/api/v1/actuator/health`
@@ -61,58 +62,54 @@ java -jar target/user-service-1.0.0.jar \
 
 ---
 
-## Step 3 — Product Service (Port 8082)
+## Step 4 — Product Service (Port 8082)
 
-(Re-use the same `JWT_SECRET` environment variable from Step 2.)
+(Re-use the same `JWT_SECRET` from Step 2.)
 
 ```bash
 cd product-service
+cp .env.example .env
+# Edit .env — same JWT_SECRET; MONGODB_URI for products_db
+
+export JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home -v 17 2>/dev/null || true)}"
 mvn clean package -DskipTests
-java -jar target/product-service-1.0.0.jar \
-  --MONGODB_URI="mongodb://localhost:27017/products_db" \
-  --JWT_SECRET="$JWT_SECRET"
+
+set -a && [ -f .env ] && . ./.env; set +a
+java -jar target/product-service-1.0.0.jar
 ```
 
 **Verify:** `curl http://localhost:8082/api/v1/actuator/health`
 
 ---
 
-## Step 4 — Order Service (Port 8083)
+## Step 5 — Order Service (Port 8083)
 
-(Re-use the same `JWT_SECRET` environment variable from Step 2.)
+(Re-use the same `JWT_SECRET` from Step 2.)
 
 ```bash
 cd order-service
+cp .env.example .env
+# Edit .env — JWT_SECRET, MONGODB_URI, PRODUCT_SERVICE_URL, USER_SERVICE_URL (localhost)
+
+export JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home -v 17 2>/dev/null || true)}"
 mvn clean package -DskipTests
-java -jar target/order-service-1.0.0.jar \
-  --MONGODB_URI="mongodb://localhost:27017/orders_db" \
-  --JWT_SECRET="$JWT_SECRET" \
-  --PRODUCT_SERVICE_URL="http://localhost:8082/api/v1" \
-  --USER_SERVICE_URL="http://localhost:8081/api/v1"
+
+set -a && [ -f .env ] && . ./.env; set +a
+java -jar target/order-service-1.0.0.jar
 ```
 
 **Verify:** `curl http://localhost:8083/api/v1/actuator/health`
 
 ---
 
-## Step 5 — Frontend (Port 5173)
+## Step 6 — Frontend (Port 5173)
 
 The app uses **HashRouter** (`/#/…` paths) so it works on static hosts without server rewrite rules.
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Configure environment
-cp .env.example .env.local
-# .env.local:
-# VITE_USER_SERVICE_URL=http://localhost:8081/api/v1
-# VITE_PRODUCT_SERVICE_URL=http://localhost:8082/api/v1
-# VITE_ORDER_SERVICE_URL=http://localhost:8083/api/v1
-
-# Start dev server
+# Default: Vite proxies /api/* to localhost — see vite.config.ts. Optional: .env.local with VITE_PROXY_API_HOST.
 npm run dev
 ```
 
@@ -120,7 +117,7 @@ npm run dev
 
 ---
 
-## Step 6 — Bootstrap Data
+## Step 7 — Bootstrap Data
 
 Use the **Organization ID** values returned by the API (also visible in **Admin → Organizations** in the UI) when registering users.
 
@@ -181,6 +178,7 @@ curl -X POST http://localhost:8081/api/v1/auth/register \
 | SPA 404 on refresh                 | Use hash URLs (`/#/…`) or serve `index.html` for all routes. |
 | Order service can't reach products | Check `PRODUCT_SERVICE_URL` |
 | Approve order fails (stock)        | Add **Inventory** batches so **available** (sellable) covers line quantities. |
+| Maven / Lombok compile errors      | Point `JAVA_HOME` at **JDK 17** before `mvn` (macOS: `/usr/libexec/java_home -v 17`). |
 
 ### Demo checklist
 

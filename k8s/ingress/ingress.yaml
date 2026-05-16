@@ -14,7 +14,9 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/load-balancer-name: a747ff2f32f01499e8d5469c24a5ddd6
 
-    # HTTPS
+    # HTTPS — ACM cert MUST be in the SAME region as this ALB (e.g. ap-southeast-2).
+    # Do NOT use a us-east-1 certificate here (those are for CloudFront only). ELB returns:
+    # ValidationError: Certificate ARN 'arn:aws:acm:us-east-1:...' is not valid
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-2:728735520903:certificate/6cc78bf4-12b8-42fa-b1d0-a4123af2c72f

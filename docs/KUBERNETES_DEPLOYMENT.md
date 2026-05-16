@@ -75,6 +75,10 @@ After you apply `k8s/ingress/ingress.yaml`, set **`spec.rules[0].host`** to `api
 alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT:certificate/UUID
 ```
 
+   **Important:** A **`us-east-1`** ACM ARN on the Ingress causes  
+   `ValidationError: Certificate ARN 'arn:aws:acm:us-east-1:...' is not valid`  
+   — regional **ALBs** must use a cert in the **same region** as the ALB (e.g. `ap-southeast-2`). **`us-east-1`** certs are for **CloudFront** only.
+
    - Set **`spec.rules[*].host`** to `api.edublitzb2berp.online`, then `kubectl apply -f k8s/ingress/`.
 
 3. **Security group** on the ALB (annotation `alb.ingress.kubernetes.io/security-groups`) must allow **443** (and **80** if you redirect HTTP→HTTPS).
@@ -315,6 +319,7 @@ kubectl rollout undo deployment/user-service -n med-erp
 |--------------------------------|---------------------------------------------------|
 | Pod in CrashLoopBackOff        | `kubectl logs <pod> -n med-erp --previous`        |
 | Pod in Pending                 | `kubectl describe pod <pod> -n med-erp`           |
+| **Ingress / ALB: `Certificate ARN ... is not valid` (400)** | ALB requires an ACM cert in the **same region** as the load balancer (e.g. **`ap-southeast-2`**). A cert in **`us-east-1`** is only valid for **CloudFront** — request a separate **`api.…`** cert in the EKS region and use that ARN on the Ingress. |
 | Ingress has no ADDRESS         | Check ALB controller logs in kube-system ns       |
 | **Error: namespace "med-erp" not found** (secrets / apply) | Run **`kubectl apply -f k8s/namespace/`** before secrets or workloads |
 | Pod **0/1 Ready**, app logs look healthy | Readiness uses `/actuator/health/readiness` — ensure services enable **`management.endpoint.health.probes.enabled=true`** and permit **`/actuator/health/**`** in security (fixed in repo); rebuild images and rollout |

@@ -12,7 +12,7 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/load-balancer-name: a747ff2f32f01499e8d5469c24a5ddd6
+    alb.ingress.kubernetes.io/load-balancer-name: med-erp-alb
 
     # HTTPS — ACM cert MUST be in the SAME region as this ALB (e.g. ap-southeast-2).
     # Do NOT use a us-east-1 certificate here (those are for CloudFront only). ELB returns:

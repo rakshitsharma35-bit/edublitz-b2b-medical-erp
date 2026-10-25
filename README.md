@@ -14,7 +14,7 @@ I worked on deploying the application through Amazon CloudFront and updating dep
 
 
 ## Architecture
-
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CloudFront CDN                           │
 │                    (React Frontend via S3)                      │
@@ -36,7 +36,7 @@ I worked on deploying the application through Amazon CloudFront and updating dep
 │                     MongoDB Atlas (or local)                    │
 │   users_db          products_db            orders_db            │
 └──────────────────────────────────────────────────────────────────┘
-
+```
 
 
 ## Application Overview

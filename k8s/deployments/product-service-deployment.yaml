@@ -30,12 +30,12 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: product-service
-          image: 836739852243.dkr.ecr.us-east-1.amazonaws.com/products/products:latest
+          image: 803426002198.dkr.ecr.ap-south-1.amazonaws.com/productsdb/productsdb:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 8082
+            - containerPort: 8080
           env:
-            - name: MONGODB_URI
+            - name: SPRING_DATA_MONGODB_URI
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
@@ -64,14 +64,14 @@ spec:
               memory: "1Gi"
           readinessProbe:
             httpGet:
-              path: /api/v1/actuator/health/readiness
-              port: 8082
+              path: /actuator/health/readiness
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/v1/actuator/health/liveness
-              port: 8082
+              path: /actuator/health/liveness
+              port: 8080
             initialDelaySeconds: 60
             periodSeconds: 30
           lifecycle:

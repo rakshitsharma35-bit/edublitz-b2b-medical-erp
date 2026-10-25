@@ -15,18 +15,28 @@ I worked on deploying the application through Amazon CloudFront and updating dep
 
 ## Architecture
 
-Users
-  │
-  ▼
-Amazon CloudFront
-  ├── Frontend requests ──► S3-hosted React application
-  └── API requests ───────► AWS load balancer / Kubernetes ingress
-                                ├── user-service
-                                ├── product-service
-                                └── order-service
-                                      │
-                                      ▼
-                                  MongoDB
+┌─────────────────────────────────────────────────────────────────┐
+│                        CloudFront CDN                           │
+│                    (React Frontend via S3)                      │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────────┐
+│              AWS ALB Ingress Controller (EKS)                   │
+└──────┬─────────────────────┬──────────────────────┬────────────┘
+       │                     │                      │
+┌──────▼──────┐    ┌─────────▼────────┐   ┌────────▼────────┐
+│ user-service│    │ product-service  │   │  order-service  │
+│  Port: 8081 │    │   Port: 8082     │   │   Port: 8083    │
+│             │    │                  │   │                 │
+│ Auth / JWT  │    │ Catalog / Stock  │   │ Order lifecycle │
+│ Roles/Orgs  │    │ Batches / Reserve│   │ (+ product API) │
+└──────┬──────┘    └─────────┬────────┘   └────────┬────────┘
+       │                     │                      │
+┌──────▼─────────────────────▼──────────────────────▼─────────────┐
+│                     MongoDB Atlas (or local)                    │
+│   users_db          products_db            orders_db            │
+└──────────────────────────────────────────────────────────────────┘
+
 
 
 ## Application Overview
